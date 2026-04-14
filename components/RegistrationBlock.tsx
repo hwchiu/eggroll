@@ -10,11 +10,30 @@ import {
   Loader2,
   Sparkles,
   CheckCircle2,
+  Wand2,
 } from "lucide-react";
 import AIBreakdown from "./AIBreakdown";
 import ModelVersionPanel from "./ModelVersionPanel";
+import type { HistoryEntry } from "@/lib/storage";
 
-export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost: number) => void }) {
+const AI_TOTAL_ESTIMATE = 87500; // from SAMPLE_ANALYSIS
+const MODEL_VERSION = "gpt-4o-2024-11-20";
+
+function formatWithCommas(raw: string): string {
+  const digits = raw.replace(/[^0-9]/g, "");
+  if (!digits) return "";
+  return parseInt(digits, 10).toLocaleString("en-US");
+}
+
+function parseAmount(formatted: string): number {
+  return parseInt(formatted.replace(/,/g, ""), 10) || 0;
+}
+
+export default function RegistrationBlock({
+  onSubmit,
+}: {
+  onSubmit?: (entry: Omit<HistoryEntry, "id">) => void;
+}) {
   const [isAdd, setIsAdd] = useState(true);
   const [text, setText] = useState("提供一個 Common KM generator AI Agent with AI Chatbot feature");
   const [files, setFiles] = useState<File[]>([]);
@@ -22,9 +41,8 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
   const [result, setResult] = useState<"idle" | "analyzing" | "done">("idle");
   const [submitted, setSubmitted] = useState(false);
   const [taskIsAdd, setTaskIsAdd] = useState(true);
+  const [amountInput, setAmountInput] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-
-  const MODEL_VERSION = "gpt-4o-2024-11-20";
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -42,14 +60,33 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
     setResult("analyzing");
     setSubmitted(false);
     setTaskIsAdd(isAdd);
-    // Simulate AI analysis delay
     await new Promise((r) => setTimeout(r, 2200));
     setLoading(false);
     setResult("done");
   };
 
+  const handleFillAIAmount = () => {
+    setAmountInput(formatWithCommas(String(AI_TOTAL_ESTIMATE)));
+  };
+
+  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setAmountInput(formatWithCommas(e.target.value));
+  };
+
   const handleSubmit = () => {
-    if (onCostAdded) onCostAdded(taskIsAdd ? 87500 : -87500);
+    const amount = parseAmount(amountInput);
+    if (onSubmit) {
+      onSubmit({
+        name: text.slice(0, 60) || "Unnamed Service",
+        description: text,
+        type: taskIsAdd ? "add" : "deduct",
+        amount,
+        date: new Date().toISOString().split("T")[0],
+        status: "Active",
+        model: MODEL_VERSION,
+        category: "AI/ML",
+      });
+    }
     setSubmitted(true);
   };
 
@@ -69,9 +106,7 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
           <button
             onClick={() => setIsAdd(true)}
             className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all ${
-              isAdd
-                ? "bg-green-500 text-white shadow"
-                : "text-gray-500 hover:text-gray-300"
+              isAdd ? "bg-green-500 text-white shadow" : "text-gray-500 hover:text-gray-300"
             }`}
           >
             <Plus size={12} /> Add
@@ -79,9 +114,7 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
           <button
             onClick={() => setIsAdd(false)}
             className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all ${
-              !isAdd
-                ? "bg-red-500 text-white shadow"
-                : "text-gray-500 hover:text-gray-300"
+              !isAdd ? "bg-red-500 text-white shadow" : "text-gray-500 hover:text-gray-300"
             }`}
           >
             <Minus size={12} /> Deduct
@@ -159,22 +192,49 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
                 </>
               )}
             </button>
-            {result === "done" && (
-              <button
-                onClick={handleSubmit}
-                disabled={submitted}
-                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                  submitted
-                    ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                    : "bg-green-600 hover:bg-green-500 text-white shadow shadow-green-500/20"
-                }`}
-              >
-                <CheckCircle2 size={14} />
-                {submitted ? "Submitted" : "Submit"}
-              </button>
-            )}
           </div>
         </div>
+
+        {/* Amount input row — shown when analysis is done */}
+        {result === "done" && (
+          <div className="mt-3 flex items-center gap-2 fade-in">
+            <label className="text-xs text-gray-400 font-medium whitespace-nowrap">Amount (USD)</label>
+            <div
+              className="flex flex-1 items-center rounded-lg border overflow-hidden transition-all focus-within:border-blue-500/50"
+              style={{ background: "#111827", borderColor: "#1f2937" }}
+            >
+              <span className="pl-3 text-gray-500 text-sm font-mono">$</span>
+              <input
+                type="text"
+                inputMode="numeric"
+                value={amountInput}
+                onChange={handleAmountChange}
+                placeholder="0"
+                className="flex-1 bg-transparent px-2 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none font-mono"
+              />
+              <button
+                onClick={handleFillAIAmount}
+                title="Fill with AI estimated total"
+                className="flex items-center gap-1 px-3 py-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-all border-l border-gray-700"
+              >
+                <Wand2 size={13} />
+                <span className="hidden sm:inline">AI Estimate</span>
+              </button>
+            </div>
+            <button
+              onClick={handleSubmit}
+              disabled={submitted || !amountInput}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
+                submitted || !amountInput
+                  ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-500 text-white shadow shadow-green-500/20"
+              }`}
+            >
+              <CheckCircle2 size={14} />
+              {submitted ? "Submitted" : "Submit"}
+            </button>
+          </div>
+        )}
 
         {/* Type indicator */}
         <div className="mt-2 flex items-center gap-1.5">
@@ -202,17 +262,21 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            {["Parsing description", "Identifying components", "Estimating costs", "Assigning confidence", "Gathering references"].map(
-              (step, i) => (
-                <span
-                  key={step}
-                  className="text-xs px-2 py-0.5 rounded border border-blue-500/20 text-blue-300 animate-pulse"
-                  style={{ animationDelay: `${i * 0.3}s` }}
-                >
-                  {step}
-                </span>
-              )
-            )}
+            {[
+              "Parsing description",
+              "Identifying components",
+              "Estimating costs",
+              "Assigning confidence",
+              "Gathering references",
+            ].map((step, i) => (
+              <span
+                key={step}
+                className="text-xs px-2 py-0.5 rounded border border-blue-500/20 text-blue-300 animate-pulse"
+                style={{ animationDelay: `${i * 0.3}s` }}
+              >
+                {step}
+              </span>
+            ))}
           </div>
         </div>
       )}
