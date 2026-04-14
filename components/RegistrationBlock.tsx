@@ -203,7 +203,6 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
                   <button
                     onClick={handleSubmit}
                     disabled={submitted || amountValue <= 0}
-                    aria-disabled={submitted || amountValue <= 0}
                     aria-describedby={amountHintId}
                     className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
                       submitted || amountValue <= 0
