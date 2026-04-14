@@ -44,9 +44,12 @@ export default function LiveTicker({ extraCost = 0 }: { extraCost?: number }) {
     <div className="w-full py-8 px-4 flex flex-col items-center">
       {/* Main ticker */}
       <div className="relative flex flex-col items-center">
-        <div className="text-xs uppercase tracking-[0.3em] text-gray-500 mb-3 font-medium">
-          Total Live Cost (USD)
-        </div>
+        <h1
+          className="font-black uppercase tracking-[0.18em] text-white mb-4 text-center"
+          style={{ fontSize: "clamp(1rem, 3.5vw, 1.75rem)", letterSpacing: "0.18em" }}
+        >
+          SENTINELPAY : VIP SERVICE PAYMENT TRACKER
+        </h1>
         <div className="flex items-baseline gap-1">
           <span className="text-2xl font-mono font-bold mt-1" style={{ color: "#F87171" }}>$</span>
           <span

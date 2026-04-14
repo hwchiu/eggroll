@@ -5,7 +5,7 @@ import RegistrationBlock from "@/components/RegistrationBlock";
 import ShareRow from "@/components/ShareRow";
 import EstimationHistory from "@/components/EstimationHistory";
 import ContributionGraph from "@/components/ContributionGraph";
-import { Activity, DollarSign, Zap, BarChart2, KeyRound, X, CheckCircle2, AlertCircle } from "lucide-react";
+import { Activity, DollarSign, Zap, BarChart2, KeyRound, X, CheckCircle2, AlertCircle, Gem } from "lucide-react";
 
 const RESET_PASSWORD = "長官是最棒的";
 
@@ -67,6 +67,10 @@ export default function Home() {
             </span>
           </div>
           <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-sky-400/30 bg-sky-400/5">
+              <Gem size={13} className="text-sky-300" />
+              <span className="text-xs font-semibold text-sky-300 tracking-wide">Diamond Member</span>
+            </div>
             <button
               onClick={openResetModal}
               className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-orange-400 transition-colors"
