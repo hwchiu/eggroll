@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
+import type { HistoryEntry } from "@/lib/storage";
 
 type CellData = { date: string; count: number; amount: number };
 
-function generateContribData(): CellData[] {
+function generateContribData(entries: HistoryEntry[]): CellData[] {
   const cells: CellData[] = [];
   const now = new Date("2026-04-14");
   const start = new Date(now);
@@ -11,35 +12,18 @@ function generateContribData(): CellData[] {
   // Align to Sunday
   start.setDate(start.getDate() - start.getDay());
 
-  const events = [
-    { date: "2025-06-12", amount: 54200 },
-    { date: "2025-08-05", amount: 33500 },
-    { date: "2025-09-22", amount: 41000 },
-    { date: "2025-11-14", amount: 62800 },
-    { date: "2025-12-03", amount: 15000 },
-    { date: "2026-01-08", amount: 41000 },
-    { date: "2026-01-18", amount: 33500 },
-    { date: "2026-02-01", amount: 15000 },
-    { date: "2026-02-20", amount: 41000 },
-    { date: "2026-03-15", amount: 62800 },
-    { date: "2026-03-22", amount: 54200 },
-    { date: "2026-03-28", amount: 54200 },
-    { date: "2026-04-02", amount: 15000 },
-    { date: "2026-04-07", amount: 87500 },
-    { date: "2026-04-14", amount: 87500 },
-  ];
-
-  const eventMap = new Map(events.map((e) => [e.date, e]));
+  // Build event map from history entries
+  const eventMap = new Map<string, number>();
+  for (const e of entries) {
+    const key = e.date.split("T")[0];
+    eventMap.set(key, (eventMap.get(key) ?? 0) + e.amount);
+  }
 
   let cursor = new Date(start);
   while (cursor <= now) {
     const iso = cursor.toISOString().split("T")[0];
-    const ev = eventMap.get(iso);
-    cells.push({
-      date: iso,
-      count: ev ? 1 : 0,
-      amount: ev ? ev.amount : 0,
-    });
+    const amount = eventMap.get(iso) ?? 0;
+    cells.push({ date: iso, count: amount > 0 ? 1 : 0, amount });
     cursor.setDate(cursor.getDate() + 1);
   }
   return cells;
@@ -56,13 +40,13 @@ function getColor(count: number, amount: number): string {
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
-export default function ContributionGraph() {
+export default function ContributionGraph({ entries }: { entries: HistoryEntry[] }) {
   const [cells, setCells] = useState<CellData[]>([]);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; cell: CellData } | null>(null);
 
   useEffect(() => {
-    setCells(generateContribData());
-  }, []);
+    setCells(generateContribData(entries));
+  }, [entries]);
 
   if (cells.length === 0) return null;
 
@@ -143,7 +127,7 @@ export default function ContributionGraph() {
               <div className="flex gap-px">
                 {weeks.map((week, wi) => (
                   <div key={wi} className="flex flex-col gap-px">
-                    {week.map((cell, di) => (
+                    {week.map((cell) => (
                       <div
                         key={cell.date}
                         className="contribution-cell cursor-pointer"
