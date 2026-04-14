@@ -1,87 +1,11 @@
 "use client";
 import { useState } from "react";
 import { Clock, TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
+import type { HistoryEntry } from "@/lib/types";
 
-interface HistoryEntry {
-  id: string;
-  name: string;
-  description: string;
-  type: "add" | "deduct";
-  amount: number;
-  date: string;
-  status: "Active" | "Completed" | "Pending";
-  model: string;
-  category: string;
+interface Props {
+  history: HistoryEntry[];
 }
-
-const HISTORY: HistoryEntry[] = [
-  {
-    id: "h1",
-    name: "GPT-4o Enterprise API Integration",
-    description: "Full-stack integration of OpenAI GPT-4o for enterprise knowledge base with RAG pipeline, custom embeddings, and multi-tenant isolation.",
-    type: "add",
-    amount: 87500,
-    date: "2026-04-14",
-    status: "Active",
-    model: "gpt-4o-2024-11-20",
-    category: "AI/ML",
-  },
-  {
-    id: "h2",
-    name: "Autonomous AI Code Review Agent",
-    description: "AI-powered code review system with GitHub integration, security scanning, style enforcement, and automated PR feedback generation.",
-    type: "add",
-    amount: 54200,
-    date: "2026-03-28",
-    status: "Active",
-    model: "gpt-4-turbo-2024-04-09",
-    category: "DevOps/AI",
-  },
-  {
-    id: "h3",
-    name: "AI-Powered Customer Support Platform",
-    description: "Multi-channel customer support with LLM-based intent detection, ticket routing, automated response generation, and escalation logic.",
-    type: "add",
-    amount: 62800,
-    date: "2026-03-15",
-    status: "Completed",
-    model: "claude-3-5-sonnet-20241022",
-    category: "AI/ML",
-  },
-  {
-    id: "h4",
-    name: "Predictive Analytics Dashboard",
-    description: "Business intelligence platform with ML forecasting, anomaly detection, real-time data pipelines, and interactive visualization.",
-    type: "add",
-    amount: 41000,
-    date: "2026-02-20",
-    status: "Completed",
-    model: "gpt-4-0125-preview",
-    category: "Data/ML",
-  },
-  {
-    id: "h5",
-    name: "Vendor Contract Optimization Discount",
-    description: "Annual subscription discount applied for cloud services and API usage optimization through vendor negotiation.",
-    type: "deduct",
-    amount: 15000,
-    date: "2026-02-01",
-    status: "Completed",
-    model: "gpt-4o-2024-11-20",
-    category: "Finance",
-  },
-  {
-    id: "h6",
-    name: "AI Document Processing Pipeline",
-    description: "Automated document ingestion, OCR, classification, extraction, and indexing pipeline for legal and financial documents.",
-    type: "add",
-    amount: 33500,
-    date: "2026-01-18",
-    status: "Completed",
-    model: "gpt-4-turbo-2024-04-09",
-    category: "AI/ML",
-  },
-];
 
 function StatusBadge({ status }: { status: HistoryEntry["status"] }) {
   const styles = {
@@ -96,12 +20,12 @@ function StatusBadge({ status }: { status: HistoryEntry["status"] }) {
   );
 }
 
-export default function EstimationHistory() {
+export default function EstimationHistory({ history }: Props) {
   const [filter, setFilter] = useState<"all" | "add" | "deduct">("all");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const filtered = HISTORY.filter((h) => filter === "all" || h.type === filter);
-  const total = HISTORY.reduce((sum, h) => sum + (h.type === "add" ? h.amount : -h.amount), 0);
+  const filtered = history.filter((h) => filter === "all" || h.type === filter);
+  const total = history.reduce((sum, h) => sum + (h.type === "add" ? h.amount : -h.amount), 0);
 
   return (
     <div
@@ -146,56 +70,66 @@ export default function EstimationHistory() {
       </div>
 
       {/* Entries */}
-      <div className="divide-y divide-gray-800/50">
-        {filtered.map((entry) => (
-          <div key={entry.id}>
-            <button
-              onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}
-              className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left"
-            >
-              <div
-                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
-                  entry.type === "add"
-                    ? "bg-red-500/10 text-red-400"
-                    : "bg-green-500/10 text-green-400"
-                }`}
+      {filtered.length === 0 ? (
+        <div className="p-8 text-center text-sm text-gray-600">
+          No records yet. Submit an estimation to get started.
+        </div>
+      ) : (
+        <div className="divide-y divide-gray-800/50">
+          {filtered.map((entry) => (
+            <div key={entry.id}>
+              <button
+                onClick={() => setExpanded(expanded === entry.id ? null : entry.id)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors text-left"
               >
-                {entry.type === "add" ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-medium text-white truncate">{entry.name}</span>
-                  <StatusBadge status={entry.status} />
-                </div>
-                <div className="flex items-center gap-3 mt-0.5">
-                  <span className="text-xs text-gray-500">{entry.date}</span>
-                  <span className="text-xs text-gray-600">•</span>
-                  <span className="text-xs text-gray-500 font-mono">{entry.model}</span>
-                  <span className="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">{entry.category}</span>
-                </div>
-              </div>
-              <div className="shrink-0 flex items-center gap-2">
                 <div
-                  className={`font-mono font-bold text-sm ${
-                    entry.type === "add" ? "text-red-400" : "text-green-400"
+                  className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+                    entry.type === "add"
+                      ? "bg-red-500/10 text-red-400"
+                      : "bg-green-500/10 text-green-400"
                   }`}
                 >
-                  {entry.type === "add" ? "+" : "-"}${entry.amount.toLocaleString()}
+                  {entry.type === "add" ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
                 </div>
-                <ChevronRight
-                  size={14}
-                  className={`text-gray-600 transition-transform ${expanded === entry.id ? "rotate-90" : ""}`}
-                />
-              </div>
-            </button>
-            {expanded === entry.id && (
-              <div className="px-4 pb-3 bg-gray-900/30 fade-in">
-                <p className="text-xs text-gray-400 leading-relaxed pl-11">{entry.description}</p>
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm font-medium text-white truncate">{entry.name}</span>
+                    <StatusBadge status={entry.status} />
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5">
+                    <span className="text-xs text-gray-500">{entry.date}</span>
+                    <span className="text-xs text-gray-600">•</span>
+                    <span className="text-xs text-gray-500 font-mono">{entry.model}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-gray-800 text-gray-400">
+                      {entry.category}
+                    </span>
+                  </div>
+                </div>
+                <div className="shrink-0 flex items-center gap-2">
+                  <div
+                    className={`font-mono font-bold text-sm ${
+                      entry.type === "add" ? "text-red-400" : "text-green-400"
+                    }`}
+                  >
+                    {entry.type === "add" ? "+" : "-"}${entry.amount.toLocaleString()}
+                  </div>
+                  <ChevronRight
+                    size={14}
+                    className={`text-gray-600 transition-transform ${
+                      expanded === entry.id ? "rotate-90" : ""
+                    }`}
+                  />
+                </div>
+              </button>
+              {expanded === entry.id && (
+                <div className="px-4 pb-3 bg-gray-900/30 fade-in">
+                  <p className="text-xs text-gray-400 leading-relaxed pl-11">{entry.description}</p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
