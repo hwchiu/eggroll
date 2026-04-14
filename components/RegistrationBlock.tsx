@@ -9,6 +9,7 @@ import {
   FileText,
   Loader2,
   Sparkles,
+  CheckCircle2,
 } from "lucide-react";
 import AIBreakdown from "./AIBreakdown";
 import ModelVersionPanel from "./ModelVersionPanel";
@@ -19,6 +20,8 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<"idle" | "analyzing" | "done">("idle");
+  const [submitted, setSubmitted] = useState(false);
+  const [taskIsAdd, setTaskIsAdd] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const MODEL_VERSION = "gpt-4o-2024-11-20";
@@ -37,11 +40,17 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
     if (!text.trim()) return;
     setLoading(true);
     setResult("analyzing");
+    setSubmitted(false);
+    setTaskIsAdd(isAdd);
     // Simulate AI analysis delay
     await new Promise((r) => setTimeout(r, 2200));
     setLoading(false);
     setResult("done");
-    if (onCostAdded) onCostAdded(isAdd ? 87500 : -87500);
+  };
+
+  const handleSubmit = () => {
+    if (onCostAdded) onCostAdded(taskIsAdd ? 87500 : -87500);
+    setSubmitted(true);
   };
 
   return (
@@ -150,6 +159,20 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
                 </>
               )}
             </button>
+            {result === "done" && (
+              <button
+                onClick={handleSubmit}
+                disabled={submitted}
+                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                  submitted
+                    ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                    : "bg-green-600 hover:bg-green-500 text-white shadow shadow-green-500/20"
+                }`}
+              >
+                <CheckCircle2 size={14} />
+                {submitted ? "Submitted" : "Submit"}
+              </button>
+            )}
           </div>
         </div>
 

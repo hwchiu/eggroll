@@ -6,8 +6,8 @@ const HOURLY_RATE = 42.5; // USD per hour base rate
 
 function formatCurrency(value: number): string {
   return value.toLocaleString("en-US", {
-    minimumFractionDigits: 6,
-    maximumFractionDigits: 6,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 
@@ -21,7 +21,6 @@ function formatElapsed(seconds: number): string {
 
 export default function LiveTicker({ extraCost = 0 }: { extraCost?: number }) {
   const [elapsed, setElapsed] = useState(0);
-  const [displayCost, setDisplayCost] = useState(0);
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -35,12 +34,6 @@ export default function LiveTicker({ extraCost = 0 }: { extraCost?: number }) {
         const real = (Date.now() - START_DATE.getTime()) / 1000;
         return real > 0 ? real : prev + delta;
       });
-      setDisplayCost((prev) => {
-        const real = (Date.now() - START_DATE.getTime()) / 1000;
-        const secs = real > 0 ? real : prev;
-        const base = (secs / 3600) * HOURLY_RATE;
-        return base + extraCost;
-      });
 
       rafRef.current = requestAnimationFrame(tick);
     };
@@ -49,11 +42,9 @@ export default function LiveTicker({ extraCost = 0 }: { extraCost?: number }) {
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
     };
-  }, [extraCost]);
+  }, []);
 
-  const realElapsed = (Date.now() - START_DATE.getTime()) / 1000;
-  const totalCost = realElapsed > 0 ? (realElapsed / 3600) * HOURLY_RATE + extraCost : displayCost;
-  const formatted = formatCurrency(totalCost);
+  const formatted = formatCurrency(extraCost);
   const parts = formatted.split(".");
 
   return (
@@ -64,12 +55,12 @@ export default function LiveTicker({ extraCost = 0 }: { extraCost?: number }) {
           Total Live Cost (USD)
         </div>
         <div className="flex items-baseline gap-1">
-          <span className="text-2xl text-red-500 font-mono font-bold mt-1">$</span>
+          <span className="text-2xl font-mono font-bold mt-1" style={{ color: "#F87171" }}>$</span>
           <span
             className="font-mono font-black ticker-glow"
             style={{
               fontSize: "clamp(3rem, 8vw, 7rem)",
-              color: "#ef4444",
+              color: "#F87171",
               letterSpacing: "-0.02em",
               lineHeight: 1,
             }}
@@ -77,8 +68,8 @@ export default function LiveTicker({ extraCost = 0 }: { extraCost?: number }) {
             {parts[0]}
           </span>
           <span
-            className="font-mono font-black text-red-400"
-            style={{ fontSize: "clamp(1.5rem, 4vw, 3.5rem)", lineHeight: 1 }}
+            className="font-mono font-black"
+            style={{ fontSize: "clamp(1.5rem, 4vw, 3.5rem)", lineHeight: 1, color: "#F87171" }}
           >
             .{parts[1]}
           </span>
