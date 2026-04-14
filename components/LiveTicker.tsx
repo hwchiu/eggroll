@@ -11,13 +11,6 @@ function formatCurrency(value: number): string {
   });
 }
 
-function formatElapsed(seconds: number): string {
-  const d = Math.floor(seconds / 86400);
-  const h = Math.floor((seconds % 86400) / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  return `${d}d ${String(h).padStart(2, "0")}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
-}
 
 export default function LiveTicker({ extraCost = 0 }: { extraCost?: number }) {
   const [elapsed, setElapsed] = useState(0);
@@ -85,14 +78,53 @@ export default function LiveTicker({ extraCost = 0 }: { extraCost?: number }) {
           }}
         />
 
+        {/* Elapsed time — individual unit boxes */}
+        {(() => {
+          const secs = elapsed > 0 ? elapsed : 0;
+          const d = Math.floor(secs / 86400);
+          const h = Math.floor((secs % 86400) / 3600);
+          const m = Math.floor((secs % 3600) / 60);
+          const s = Math.floor(secs % 60);
+          const units = [
+            { value: String(d).padStart(2, "0"), label: "Days" },
+            { value: String(h).padStart(2, "0"), label: "Hours" },
+            { value: String(m).padStart(2, "0"), label: "Minutes" },
+            { value: String(s).padStart(2, "0"), label: "Seconds" },
+          ];
+          return (
+            <div className="mt-6 flex items-center justify-center gap-2">
+              {units.map((unit, i) => (
+                <div key={unit.label} className="flex items-center gap-2">
+                  <div
+                    className="flex flex-col items-center rounded-lg px-4 py-3 min-w-[60px]"
+                    style={{ background: "#1a1a1a", border: "1px solid #2a2a2a" }}
+                  >
+                    <span
+                      className="font-mono font-black leading-none"
+                      style={{ fontSize: "clamp(1.5rem, 4vw, 2.5rem)", color: "#fb923c" }}
+                    >
+                      {unit.value}
+                    </span>
+                    <span className="text-[10px] uppercase tracking-widest text-gray-500 mt-1">
+                      {unit.label}
+                    </span>
+                  </div>
+                  {i < units.length - 1 && (
+                    <span
+                      className="font-mono font-bold pb-4"
+                      style={{ fontSize: "clamp(1.2rem, 3vw, 2rem)", color: "#4b5563" }}
+                    >
+                      :
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        })()}
+
         {/* Stats row */}
         <div className="mt-6 flex flex-wrap justify-center gap-8 text-center">
-          <div>
-            <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">Elapsed</div>
-            <div className="font-mono text-sm text-orange-400 font-semibold">
-              {formatElapsed(elapsed > 0 ? elapsed : 0)}
-            </div>
-          </div>
           <div>
             <div className="text-xs text-gray-500 uppercase tracking-widest mb-1">Rate / Hour</div>
             <div className="font-mono text-sm text-green-400 font-semibold">
