@@ -24,6 +24,7 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
   const [submitted, setSubmitted] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const amountInputId = "payment-amount-input";
+  const amountHintId = "payment-amount-hint";
 
   const MODEL_VERSION = "gpt-4o-2024-11-20";
 
@@ -187,6 +188,7 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
                       value={amountInput}
                       onChange={(e) => setAmountInput(formatAmount(e.target.value))}
                       placeholder="0"
+                      aria-describedby={amountHintId}
                       className="w-24 bg-transparent text-sm text-gray-200 outline-none placeholder-gray-600"
                     />
                     <button
@@ -201,6 +203,8 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
                   <button
                     onClick={handleSubmit}
                     disabled={submitted || amountValue <= 0}
+                    aria-disabled={submitted || amountValue <= 0}
+                    aria-describedby={amountHintId}
                     className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
                       submitted || amountValue <= 0
                         ? "bg-gray-700 text-gray-500 cursor-not-allowed"
@@ -214,6 +218,11 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
               )}
             </div>
           </div>
+          {result === "done" && (
+            <p id={amountHintId} className="sr-only">
+              Enter an amount greater than zero or use the AI icon to fill the estimated total.
+            </p>
+          )}
         </div>
 
         {/* Type indicator */}
