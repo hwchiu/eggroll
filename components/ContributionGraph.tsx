@@ -58,7 +58,7 @@ const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 export default function ContributionGraph() {
   const [cells, setCells] = useState<CellData[]>([]);
-  const [tooltip, setTooltip] = useState<{ x: number; y: number; cell: CellData } | null>(null);
+  const [showComingSoon, setShowComingSoon] = useState(false);
 
   useEffect(() => {
     setCells(generateContribData());
@@ -153,11 +153,7 @@ export default function ContributionGraph() {
                           background: getColor(cell.count, cell.amount),
                           borderRadius: 2,
                         }}
-                        onMouseEnter={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setTooltip({ x: rect.left, y: rect.top, cell });
-                        }}
-                        onMouseLeave={() => setTooltip(null)}
+                        onClick={() => setShowComingSoon(true)}
                       />
                     ))}
                   </div>
@@ -168,20 +164,27 @@ export default function ContributionGraph() {
         </div>
       </div>
 
-      {/* Tooltip (portal-style fixed) */}
-      {tooltip && tooltip.cell.count > 0 && (
+      {/* Coming Soon Modal */}
+      {showComingSoon && (
         <div
-          className="fixed z-50 pointer-events-none px-3 py-2 rounded-lg border text-xs"
-          style={{
-            left: tooltip.x,
-            top: tooltip.y - 56,
-            background: "#1f2937",
-            borderColor: "#374151",
-            transform: "translateX(-50%)",
-          }}
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
+          onClick={() => setShowComingSoon(false)}
         >
-          <div className="text-white font-medium">{tooltip.cell.date}</div>
-          <div className="text-blue-400">${tooltip.cell.amount.toLocaleString()}</div>
+          <div
+            className="rounded-2xl border px-10 py-8 text-center shadow-2xl"
+            style={{ background: "#0f172a", borderColor: "#1e3a5f" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="text-2xl font-bold text-white mb-2">🚀 Coming Soon</div>
+            <div className="text-sm text-gray-400 mb-5">This feature is under development.</div>
+            <button
+              onClick={() => setShowComingSoon(false)}
+              className="px-5 py-1.5 rounded-lg text-xs font-semibold bg-blue-600 hover:bg-blue-500 text-white transition-all"
+            >
+              OK
+            </button>
+          </div>
         </div>
       )}
     </div>
