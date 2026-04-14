@@ -16,16 +16,19 @@ import {
   EyeOff,
 } from "lucide-react";
 import {
-  getTotalAmount,
-  setTotalAmount as persistTotal,
-  getHistoryEntries,
-  addHistoryEntry,
+  SEED_HISTORY,
   type HistoryEntry,
 } from "@/lib/storage";
 
+// Compute initial total from seed data
+const SEED_TOTAL = SEED_HISTORY.reduce(
+  (sum, e) => sum + (e.type === "add" ? e.amount : -e.amount),
+  0
+);
+
 // ── Reset Password Dialog ──────────────────────────────────────────────────
 
-function ResetDialog({ onClose }: { onClose: () => void }) {
+function ResetDialog({ onClose, onReset }: { onClose: () => void; onReset: () => void }) {
   const [password, setPassword] = useState("");
   const [showPw, setShowPw] = useState(false);
   const [stage, setStage] = useState<"input" | "success" | "error">("input");
@@ -46,7 +49,7 @@ function ResetDialog({ onClose }: { onClose: () => void }) {
   };
 
   const handleConfirmReset = () => {
-    persistTotal(0);
+    onReset();
     onClose();
   };
 
@@ -159,42 +162,30 @@ function ResetDialog({ onClose }: { onClose: () => void }) {
 // ── Main Page ──────────────────────────────────────────────────────────────
 
 export default function Home() {
-  const [totalAmount, setTotalAmountState] = useState(0);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [totalAmount, setTotalAmountState] = useState(SEED_TOTAL);
+  const [history, setHistory] = useState<HistoryEntry[]>(SEED_HISTORY);
   const [showReset, setShowReset] = useState(false);
-  const [hydrated, setHydrated] = useState(false);
-
-  // Load persisted data client-side only
-  useEffect(() => {
-    setTotalAmountState(getTotalAmount());
-    setHistory(getHistoryEntries());
-    setHydrated(true);
-  }, []);
 
   const handleSubmit = (entry: Omit<HistoryEntry, "id">) => {
     const newEntry: HistoryEntry = {
       ...entry,
       id: `h-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     };
-    const updated = addHistoryEntry(newEntry);
-    setHistory(updated);
+    setHistory((prev) => [newEntry, ...prev]);
 
     const delta = entry.type === "add" ? entry.amount : -entry.amount;
-    const next = totalAmount + delta;
-    setTotalAmountState(next);
-    persistTotal(next);
-  };
-
-  const handleCloseReset = () => {
-    // Re-read total in case it was reset
-    setTotalAmountState(getTotalAmount());
-    setShowReset(false);
+    setTotalAmountState((prev) => prev + delta);
   };
 
   return (
     <div className="min-h-screen" style={{ background: "#0a0a0a" }}>
       {/* Reset Dialog */}
-      {showReset && <ResetDialog onClose={handleCloseReset} />}
+      {showReset && (
+        <ResetDialog
+          onClose={() => setShowReset(false)}
+          onReset={() => setTotalAmountState(0)}
+        />
+      )}
 
       {/* Top nav */}
       <nav
@@ -267,7 +258,7 @@ export default function Home() {
           }}
         />
         <div className="max-w-5xl mx-auto px-4">
-          <LiveTicker totalAmount={hydrated ? totalAmount : 0} />
+          <LiveTicker totalAmount={totalAmount} />
         </div>
       </div>
 
