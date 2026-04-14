@@ -35,9 +35,11 @@ export interface AIAnalysis {
   riskLevel: "Low" | "Medium" | "High";
 }
 
+export const AI_TOTAL_ESTIMATE = 87500;
+
 const SAMPLE_ANALYSIS: AIAnalysis = {
   projectName: "Common KM Generator AI Agent with AI Chatbot Feature",
-  totalEstimate: 87500,
+  totalEstimate: AI_TOTAL_ESTIMATE,
   totalHours: 1750,
   modelVersion: "gpt-4o-2024-11-20",
   analyzedAt: new Date().toISOString(),

@@ -11,7 +11,7 @@ import {
   Sparkles,
   CheckCircle2,
 } from "lucide-react";
-import AIBreakdown from "./AIBreakdown";
+import AIBreakdown, { AI_TOTAL_ESTIMATE } from "./AIBreakdown";
 import ModelVersionPanel from "./ModelVersionPanel";
 
 export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost: number) => void }) {
@@ -26,7 +26,6 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
   const amountInputId = "payment-amount-input";
 
   const MODEL_VERSION = "gpt-4o-2024-11-20";
-  const DEFAULT_AI_ESTIMATE = 87500;
 
   const formatAmount = (value: string) => {
     const digits = value.replace(/[^\d]/g, "");
@@ -66,6 +65,8 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
     if (onCostAdded) onCostAdded(isAdd ? amount : -amount);
     setSubmitted(true);
   };
+
+  const amountValue = getAmountValue();
 
   return (
     <div
@@ -178,7 +179,7 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
                 <>
                   <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1">
                     <label htmlFor={amountInputId} className="text-xs text-gray-400">
-                      Amount
+                      Amount (USD)
                     </label>
                     <input
                       id={amountInputId}
@@ -189,7 +190,7 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
                       className="w-24 bg-transparent text-sm text-gray-200 outline-none placeholder-gray-600"
                     />
                     <button
-                      onClick={() => setAmountInput(DEFAULT_AI_ESTIMATE.toLocaleString("en-US"))}
+                      onClick={() => setAmountInput(AI_TOTAL_ESTIMATE.toLocaleString("en-US"))}
                       className="text-blue-400 hover:text-blue-300 transition-colors"
                       aria-label="Use AI estimate total"
                       title="Use AI estimate total"
@@ -199,9 +200,9 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
                   </div>
                   <button
                     onClick={handleSubmit}
-                    disabled={submitted || getAmountValue() <= 0}
+                    disabled={submitted || amountValue <= 0}
                     className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                      submitted || getAmountValue() <= 0
+                      submitted || amountValue <= 0
                         ? "bg-gray-700 text-gray-500 cursor-not-allowed"
                         : "bg-green-600 hover:bg-green-500 text-white shadow shadow-green-500/20"
                     }`}
