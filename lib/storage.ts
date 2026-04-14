@@ -1,5 +1,4 @@
-// Persistent storage helpers using localStorage (JSON format)
-// Survives page refresh; initial seed data prevents blank state after re-deploy.
+// Shared types and seed data for the payment tracker.
 
 export interface HistoryEntry {
   id: string;
@@ -13,11 +12,8 @@ export interface HistoryEntry {
   category: string;
 }
 
-const TOTAL_AMOUNT_KEY = "paymentTracker_totalAmount";
-const HISTORY_KEY = "paymentTracker_history";
-
-// Seed data used the very first time the site loads (localStorage empty)
-const SEED_HISTORY: HistoryEntry[] = [
+// Initial seed data shown on first load (resets on page refresh / re-deploy).
+export const SEED_HISTORY: HistoryEntry[] = [
   {
     id: "h1",
     name: "GPT-4o Enterprise API Integration",
@@ -92,56 +88,3 @@ const SEED_HISTORY: HistoryEntry[] = [
   },
 ];
 
-// ──────────────────────────────────────────────
-// Total Amount
-// ──────────────────────────────────────────────
-
-export function getTotalAmount(): number {
-  if (typeof window === "undefined") return 0;
-  const raw = localStorage.getItem(TOTAL_AMOUNT_KEY);
-  if (raw === null) {
-    // Seed with net total of SEED_HISTORY
-    const seed = SEED_HISTORY.reduce(
-      (sum, e) => sum + (e.type === "add" ? e.amount : -e.amount),
-      0
-    );
-    localStorage.setItem(TOTAL_AMOUNT_KEY, String(seed));
-    return seed;
-  }
-  return parseFloat(raw) || 0;
-}
-
-export function setTotalAmount(amount: number): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(TOTAL_AMOUNT_KEY, String(amount));
-}
-
-// ──────────────────────────────────────────────
-// Estimation History
-// ──────────────────────────────────────────────
-
-export function getHistoryEntries(): HistoryEntry[] {
-  if (typeof window === "undefined") return SEED_HISTORY;
-  const raw = localStorage.getItem(HISTORY_KEY);
-  if (raw === null) {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(SEED_HISTORY));
-    return SEED_HISTORY;
-  }
-  try {
-    return JSON.parse(raw) as HistoryEntry[];
-  } catch {
-    return SEED_HISTORY;
-  }
-}
-
-export function saveHistoryEntries(entries: HistoryEntry[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(entries));
-}
-
-export function addHistoryEntry(entry: HistoryEntry): HistoryEntry[] {
-  const entries = getHistoryEntries();
-  const updated = [entry, ...entries];
-  saveHistoryEntries(updated);
-  return updated;
-}
