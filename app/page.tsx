@@ -174,7 +174,7 @@ export default function Home() {
   const handleSubmit = (entry: Omit<HistoryEntry, "id">) => {
     const newEntry: HistoryEntry = {
       ...entry,
-      id: `h-${Date.now()}`,
+      id: `h-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     };
     const updated = addHistoryEntry(newEntry);
     setHistory(updated);
