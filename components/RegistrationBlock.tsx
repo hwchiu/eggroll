@@ -10,31 +10,11 @@ import {
   Loader2,
   Sparkles,
   CheckCircle2,
-  Wand2,
 } from "lucide-react";
 import AIBreakdown from "./AIBreakdown";
 import ModelVersionPanel from "./ModelVersionPanel";
-import type { HistoryEntry } from "@/lib/types";
 
-const MODEL_VERSION = "gpt-4o-2024-11-20";
-// Matches SAMPLE_ANALYSIS.totalEstimate in AIBreakdown
-const AI_TOTAL_ESTIMATE = 87500;
-
-interface Props {
-  onSubmit?: (
-    amount: number,
-    isAdd: boolean,
-    entry: Omit<HistoryEntry, "id" | "date">
-  ) => void;
-}
-
-function formatWithCommas(raw: string): string {
-  const digits = raw.replace(/[^0-9]/g, "");
-  if (!digits) return "";
-  return parseInt(digits, 10).toLocaleString("en-US");
-}
-
-export default function RegistrationBlock({ onSubmit }: Props) {
+export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost: number) => void }) {
   const [isAdd, setIsAdd] = useState(true);
   const [text, setText] = useState("提供一個 Common KM generator AI Agent with AI Chatbot feature");
   const [files, setFiles] = useState<File[]>([]);
@@ -42,8 +22,9 @@ export default function RegistrationBlock({ onSubmit }: Props) {
   const [result, setResult] = useState<"idle" | "analyzing" | "done">("idle");
   const [submitted, setSubmitted] = useState(false);
   const [taskIsAdd, setTaskIsAdd] = useState(true);
-  const [amountInput, setAmountInput] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const MODEL_VERSION = "gpt-4o-2024-11-20";
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -61,33 +42,14 @@ export default function RegistrationBlock({ onSubmit }: Props) {
     setResult("analyzing");
     setSubmitted(false);
     setTaskIsAdd(isAdd);
-    setAmountInput("");
+    // Simulate AI analysis delay
     await new Promise((r) => setTimeout(r, 2200));
     setLoading(false);
     setResult("done");
   };
 
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setAmountInput(formatWithCommas(e.target.value));
-  };
-
-  const fillAiEstimate = () => {
-    setAmountInput(AI_TOTAL_ESTIMATE.toLocaleString("en-US"));
-  };
-
   const handleSubmit = () => {
-    const numAmount = parseInt(amountInput.replace(/,/g, ""), 10) || 0;
-    if (onSubmit) {
-      onSubmit(numAmount, taskIsAdd, {
-        name: text.trim() || "Unknown Service",
-        description: text.trim(),
-        type: taskIsAdd ? "add" : "deduct",
-        amount: numAmount,
-        status: "Active",
-        model: MODEL_VERSION,
-        category: "AI/ML",
-      });
-    }
+    if (onCostAdded) onCostAdded(taskIsAdd ? 87500 : -87500);
     setSubmitted(true);
   };
 
@@ -107,7 +69,9 @@ export default function RegistrationBlock({ onSubmit }: Props) {
           <button
             onClick={() => setIsAdd(true)}
             className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all ${
-              isAdd ? "bg-green-500 text-white shadow" : "text-gray-500 hover:text-gray-300"
+              isAdd
+                ? "bg-green-500 text-white shadow"
+                : "text-gray-500 hover:text-gray-300"
             }`}
           >
             <Plus size={12} /> Add
@@ -115,7 +79,9 @@ export default function RegistrationBlock({ onSubmit }: Props) {
           <button
             onClick={() => setIsAdd(false)}
             className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-semibold transition-all ${
-              !isAdd ? "bg-red-500 text-white shadow" : "text-gray-500 hover:text-gray-300"
+              !isAdd
+                ? "bg-red-500 text-white shadow"
+                : "text-gray-500 hover:text-gray-300"
             }`}
           >
             <Minus size={12} /> Deduct
@@ -132,7 +98,7 @@ export default function RegistrationBlock({ onSubmit }: Props) {
           <textarea
             value={text}
             onChange={(e) => setText(e.target.value)}
-            placeholder="Describe the service or item to register…"
+            placeholder="Describe the service or item to register… (e.g. 'AI-powered customer support chatbot with RAG')"
             rows={4}
             className="w-full bg-transparent px-4 py-3 text-sm text-gray-200 placeholder-gray-600 resize-none outline-none"
           />
@@ -174,67 +140,39 @@ export default function RegistrationBlock({ onSubmit }: Props) {
               />
             </div>
 
-            <div className="flex items-center gap-2">
-              {/* Amount input — shown once analysis is done */}
-              {result === "done" && (
-                <div
-                  className="flex items-center rounded-lg border overflow-hidden"
-                  style={{ borderColor: "#1f2937", background: "#0f172a" }}
-                >
-                  <span className="pl-2 text-xs text-gray-500 whitespace-nowrap">Amount</span>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    value={amountInput}
-                    onChange={handleAmountChange}
-                    placeholder="0"
-                    className="w-28 bg-transparent px-2 py-1.5 text-xs text-gray-200 placeholder-gray-600 outline-none font-mono tabular-nums"
-                  />
-                  <button
-                    onClick={fillAiEstimate}
-                    title="Fill with AI estimate"
-                    className="flex items-center justify-center px-2 py-1.5 border-l border-gray-700 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 transition-all"
-                  >
-                    <Wand2 size={13} />
-                  </button>
-                </div>
+            <button
+              onClick={handleStartTask}
+              disabled={loading || !text.trim()}
+              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                loading || !text.trim()
+                  ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                  : "bg-blue-600 hover:bg-blue-500 text-white shadow shadow-blue-500/20"
+              }`}
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={14} className="animate-spin" /> Analyzing…
+                </>
+              ) : (
+                <>
+                  <Play size={13} /> Start Task
+                </>
               )}
-
+            </button>
+            {result === "done" && (
               <button
-                onClick={handleStartTask}
-                disabled={loading || !text.trim()}
+                onClick={handleSubmit}
+                disabled={submitted}
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                  loading || !text.trim()
+                  submitted
                     ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-500 text-white shadow shadow-blue-500/20"
+                    : "bg-green-600 hover:bg-green-500 text-white shadow shadow-green-500/20"
                 }`}
               >
-                {loading ? (
-                  <>
-                    <Loader2 size={14} className="animate-spin" /> Analyzing…
-                  </>
-                ) : (
-                  <>
-                    <Play size={13} /> Start Task
-                  </>
-                )}
+                <CheckCircle2 size={14} />
+                {submitted ? "Submitted" : "Submit"}
               </button>
-
-              {result === "done" && (
-                <button
-                  onClick={handleSubmit}
-                  disabled={submitted}
-                  className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                    submitted
-                      ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                      : "bg-green-600 hover:bg-green-500 text-white shadow shadow-green-500/20"
-                  }`}
-                >
-                  <CheckCircle2 size={14} />
-                  {submitted ? "Submitted" : "Submit"}
-                </button>
-              )}
-            </div>
+            )}
           </div>
         </div>
 
@@ -264,21 +202,17 @@ export default function RegistrationBlock({ onSubmit }: Props) {
             </div>
           </div>
           <div className="mt-3 flex flex-wrap gap-2">
-            {[
-              "Parsing description",
-              "Identifying components",
-              "Estimating costs",
-              "Assigning confidence",
-              "Gathering references",
-            ].map((step, i) => (
-              <span
-                key={step}
-                className="text-xs px-2 py-0.5 rounded border border-blue-500/20 text-blue-300 animate-pulse"
-                style={{ animationDelay: `${i * 0.3}s` }}
-              >
-                {step}
-              </span>
-            ))}
+            {["Parsing description", "Identifying components", "Estimating costs", "Assigning confidence", "Gathering references"].map(
+              (step, i) => (
+                <span
+                  key={step}
+                  className="text-xs px-2 py-0.5 rounded border border-blue-500/20 text-blue-300 animate-pulse"
+                  style={{ animationDelay: `${i * 0.3}s` }}
+                >
+                  {step}
+                </span>
+              )
+            )}
           </div>
         </div>
       )}

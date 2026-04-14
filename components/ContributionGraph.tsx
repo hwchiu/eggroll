@@ -1,34 +1,45 @@
 "use client";
-import { useState, useMemo } from "react";
-import type { HistoryEntry } from "@/lib/types";
+import { useState, useEffect } from "react";
 
 type CellData = { date: string; count: number; amount: number };
 
-function buildCells(history: HistoryEntry[]): CellData[] {
-  const now = new Date();
+function generateContribData(): CellData[] {
+  const cells: CellData[] = [];
+  const now = new Date("2026-04-14");
   const start = new Date(now);
   start.setFullYear(now.getFullYear() - 1);
   // Align to Sunday
   start.setDate(start.getDate() - start.getDay());
 
-  // Build a map: date → {count, amount}
-  const eventMap = new Map<string, { count: number; amount: number }>();
-  for (const entry of history) {
-    const existing = eventMap.get(entry.date);
-    if (existing) {
-      existing.count += 1;
-      existing.amount += entry.amount;
-    } else {
-      eventMap.set(entry.date, { count: 1, amount: entry.amount });
-    }
-  }
+  const events = [
+    { date: "2025-06-12", amount: 54200 },
+    { date: "2025-08-05", amount: 33500 },
+    { date: "2025-09-22", amount: 41000 },
+    { date: "2025-11-14", amount: 62800 },
+    { date: "2025-12-03", amount: 15000 },
+    { date: "2026-01-08", amount: 41000 },
+    { date: "2026-01-18", amount: 33500 },
+    { date: "2026-02-01", amount: 15000 },
+    { date: "2026-02-20", amount: 41000 },
+    { date: "2026-03-15", amount: 62800 },
+    { date: "2026-03-22", amount: 54200 },
+    { date: "2026-03-28", amount: 54200 },
+    { date: "2026-04-02", amount: 15000 },
+    { date: "2026-04-07", amount: 87500 },
+    { date: "2026-04-14", amount: 87500 },
+  ];
 
-  const cells: CellData[] = [];
-  const cursor = new Date(start);
+  const eventMap = new Map(events.map((e) => [e.date, e]));
+
+  let cursor = new Date(start);
   while (cursor <= now) {
     const iso = cursor.toISOString().split("T")[0];
     const ev = eventMap.get(iso);
-    cells.push({ date: iso, count: ev?.count ?? 0, amount: ev?.amount ?? 0 });
+    cells.push({
+      date: iso,
+      count: ev ? 1 : 0,
+      amount: ev ? ev.amount : 0,
+    });
     cursor.setDate(cursor.getDate() + 1);
   }
   return cells;
@@ -36,27 +47,24 @@ function buildCells(history: HistoryEntry[]): CellData[] {
 
 function getColor(count: number, amount: number): string {
   if (count === 0) return "#161b22";
-  if (amount >= 80000) return "#3b82f6";
+  if (amount >= 80000) return "#3b82f6"; // bright blue
   if (amount >= 50000) return "#2563eb";
   if (amount >= 30000) return "#1d4ed8";
   return "#1e40af";
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
-interface Props {
-  history: HistoryEntry[];
-}
-
-export default function ContributionGraph({ history }: Props) {
-  // Lazy initializer: true only on the client, avoiding useEffect setState
-  const [isClient] = useState(() => typeof window !== "undefined");
+export default function ContributionGraph() {
+  const [cells, setCells] = useState<CellData[]>([]);
   const [tooltip, setTooltip] = useState<{ x: number; y: number; cell: CellData } | null>(null);
 
-  const cells = useMemo(() => (isClient ? buildCells(history) : []), [isClient, history]);
+  useEffect(() => {
+    setCells(generateContribData());
+  }, []);
 
-  if (!isClient || cells.length === 0) return null;
+  if (cells.length === 0) return null;
 
   // Group by week columns
   const weeks: CellData[][] = [];
@@ -135,7 +143,7 @@ export default function ContributionGraph({ history }: Props) {
               <div className="flex gap-px">
                 {weeks.map((week, wi) => (
                   <div key={wi} className="flex flex-col gap-px">
-                    {week.map((cell) => (
+                    {week.map((cell, di) => (
                       <div
                         key={cell.date}
                         className="contribution-cell cursor-pointer"
@@ -160,7 +168,7 @@ export default function ContributionGraph({ history }: Props) {
         </div>
       </div>
 
-      {/* Tooltip */}
+      {/* Tooltip (portal-style fixed) */}
       {tooltip && tooltip.cell.count > 0 && (
         <div
           className="fixed z-50 pointer-events-none px-3 py-2 rounded-lg border text-xs"
