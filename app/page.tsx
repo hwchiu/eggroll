@@ -169,8 +169,12 @@ export default function Home() {
       {/* Reset Modal */}
       {showResetModal && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="reset-modal-title"
           className="fixed inset-0 z-50 flex items-center justify-center"
           style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+          onKeyDown={(e) => e.key === "Escape" && closeResetModal()}
         >
           <div
             className="relative w-full max-w-sm mx-4 rounded-2xl border p-6 shadow-2xl"
@@ -190,7 +194,7 @@ export default function Home() {
                 <KeyRound size={18} className="text-orange-400" />
               </div>
               <div>
-                <div className="text-sm font-semibold text-white">Reset Total</div>
+                <div id="reset-modal-title" className="text-sm font-semibold text-white">Reset Total</div>
                 <div className="text-xs text-gray-500 mt-0.5">Enter the secret password to proceed</div>
               </div>
             </div>

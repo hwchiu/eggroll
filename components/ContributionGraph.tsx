@@ -167,16 +167,20 @@ export default function ContributionGraph() {
       {/* Coming Soon Modal */}
       {showComingSoon && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="coming-soon-title"
           className="fixed inset-0 z-50 flex items-center justify-center"
           style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(4px)" }}
           onClick={() => setShowComingSoon(false)}
+          onKeyDown={(e) => e.key === "Escape" && setShowComingSoon(false)}
         >
           <div
             className="rounded-2xl border px-10 py-8 text-center shadow-2xl"
             style={{ background: "#0f172a", borderColor: "#1e3a5f" }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="text-2xl font-bold text-white mb-2">🚀 Coming Soon</div>
+            <div id="coming-soon-title" className="text-2xl font-bold text-white mb-2">🚀 Coming Soon</div>
             <div className="text-sm text-gray-400 mb-5">This feature is under development.</div>
             <button
               onClick={() => setShowComingSoon(false)}
