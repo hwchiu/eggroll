@@ -23,9 +23,10 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
   const [result, setResult] = useState<"idle" | "analyzing" | "done">("idle");
   const [submitted, setSubmitted] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const amountInputId = "payment-amount-input";
 
   const MODEL_VERSION = "gpt-4o-2024-11-20";
-  const AI_ESTIMATED_TOTAL = 87500;
+  const DEFAULT_AI_ESTIMATE = 87500;
 
   const formatAmount = (value: string) => {
     const digits = value.replace(/[^\d]/g, "");
@@ -176,8 +177,11 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
               {result === "done" && (
                 <>
                   <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1">
-                    <span className="text-xs text-gray-400">Amount</span>
+                    <label htmlFor={amountInputId} className="text-xs text-gray-400">
+                      Amount
+                    </label>
                     <input
+                      id={amountInputId}
                       inputMode="numeric"
                       value={amountInput}
                       onChange={(e) => setAmountInput(formatAmount(e.target.value))}
@@ -185,7 +189,7 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
                       className="w-24 bg-transparent text-sm text-gray-200 outline-none placeholder-gray-600"
                     />
                     <button
-                      onClick={() => setAmountInput(AI_ESTIMATED_TOTAL.toLocaleString("en-US"))}
+                      onClick={() => setAmountInput(DEFAULT_AI_ESTIMATE.toLocaleString("en-US"))}
                       className="text-blue-400 hover:text-blue-300 transition-colors"
                       aria-label="Use AI estimate total"
                       title="Use AI estimate total"
