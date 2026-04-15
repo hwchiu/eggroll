@@ -11,6 +11,57 @@ function formatCurrency(value: number): string {
   });
 }
 
+function BigCounterDigits({ chars, isDecimal = false }: { chars: string; isDecimal?: boolean }) {
+  return (
+    <>
+      {chars.split("").map((ch, i) => {
+        const isNum = /\d/.test(ch);
+        if (!isNum) {
+          return (
+            <span
+              key={i}
+              className="font-mono font-black self-end pb-2 select-none"
+              style={{
+                fontSize: "clamp(1.2rem, 3vw, 2.5rem)",
+                color: "#9ca3af",
+                lineHeight: 1,
+                padding: "0 2px",
+              }}
+            >
+              {ch}
+            </span>
+          );
+        }
+        return (
+          <div
+            key={i}
+            className="flex items-center justify-center rounded"
+            style={{
+              background: "linear-gradient(180deg, #1c1c1c 0%, #111111 100%)",
+              border: "1px solid #2d2d2d",
+              boxShadow: "inset 0 2px 4px rgba(0,0,0,0.6), 0 1px 0 #3a3a3a",
+              minWidth: isDecimal ? "clamp(1.4rem, 3.5vw, 3rem)" : "clamp(2rem, 5vw, 4.5rem)",
+              height: isDecimal ? "clamp(2rem, 5vw, 4rem)" : "clamp(3rem, 8vw, 7rem)",
+              padding: "0 clamp(2px, 0.4vw, 6px)",
+            }}
+          >
+            <span
+              className="font-mono font-black ticker-glow tabular-nums"
+              style={{
+                fontSize: isDecimal ? "clamp(1.2rem, 3vw, 2.6rem)" : "clamp(1.8rem, 6vw, 5.5rem)",
+                color: isDecimal ? "#fca5a5" : "#F87171",
+                lineHeight: 1,
+                textShadow: "0 0 20px rgba(248,113,113,0.5)",
+              }}
+            >
+              {ch}
+            </span>
+          </div>
+        );
+      })}
+    </>
+  );
+}
 
 export default function LiveTicker({ extraCost = 0 }: { extraCost?: number }) {
   const [elapsed, setElapsed] = useState(0);
@@ -37,77 +88,22 @@ export default function LiveTicker({ extraCost = 0 }: { extraCost?: number }) {
     };
   }, []);
 
-  const formatted = formatCurrency(extraCost);
-  // Split into integer and decimal parts
+  const runningCost = (Math.max(elapsed, 0) * HOURLY_RATE) / 3600;
+  const totalCost = runningCost + extraCost;
+  const formatted = formatCurrency(totalCost);
   const [intPart, decPart] = formatted.split(".");
-
-  // Render each character of the amount as a big-counter digit box
-  function BigCounterDigits({ chars, isDecimal = false }: { chars: string; isDecimal?: boolean }) {
-    return (
-      <>
-        {chars.split("").map((ch, i) => {
-          const isNum = /\d/.test(ch);
-          if (!isNum) {
-            // comma separator
-            return (
-              <span
-                key={i}
-                className="font-mono font-black self-end pb-2 select-none"
-                style={{
-                  fontSize: "clamp(1.2rem, 3vw, 2.5rem)",
-                  color: "#9ca3af",
-                  lineHeight: 1,
-                  padding: "0 2px",
-                }}
-              >
-                {ch}
-              </span>
-            );
-          }
-          return (
-            <div
-              key={i}
-              className="flex items-center justify-center rounded"
-              style={{
-                background: "linear-gradient(180deg, #1c1c1c 0%, #111111 100%)",
-                border: "1px solid #2d2d2d",
-                boxShadow: "inset 0 2px 4px rgba(0,0,0,0.6), 0 1px 0 #3a3a3a",
-                minWidth: isDecimal ? "clamp(1.4rem, 3.5vw, 3rem)" : "clamp(2rem, 5vw, 4.5rem)",
-                height: isDecimal ? "clamp(2rem, 5vw, 4rem)" : "clamp(3rem, 8vw, 7rem)",
-                padding: "0 clamp(2px, 0.4vw, 6px)",
-              }}
-            >
-              <span
-                className="font-mono font-black ticker-glow tabular-nums"
-                style={{
-                  fontSize: isDecimal ? "clamp(1.2rem, 3vw, 2.6rem)" : "clamp(1.8rem, 6vw, 5.5rem)",
-                  color: isDecimal ? "#fca5a5" : "#F87171",
-                  lineHeight: 1,
-                  textShadow: "0 0 20px rgba(248,113,113,0.5)",
-                }}
-              >
-                {ch}
-              </span>
-            </div>
-          );
-        })}
-      </>
-    );
-  }
 
   return (
     <div className="w-full py-8 px-4 flex flex-col items-center">
       {/* Main ticker */}
       <div className="relative flex flex-col items-center">
-        <h1
-          className="font-black uppercase tracking-[0.18em] text-white mb-4 text-center"
-          style={{ fontSize: "clamp(1rem, 3.5vw, 1.75rem)", letterSpacing: "0.18em" }}
-        >
-          SENTINELPAY : VIP SERVICE PAYMENT TRACKER
-        </h1>
+        <div className="header text-center">
+          <h1>SENTINELPAY : VIP SERVICE PAYMENT TRACKER</h1>
+          <div className="sub">Creditor Sherry Spending</div>
+        </div>
 
         {/* Big-counter style digit display */}
-        <div className="flex items-center gap-[3px] flex-wrap justify-center">
+        <div className="flex items-center gap-[3px] flex-wrap justify-center mt-2">
           {/* Dollar sign box */}
           <div
             className="flex items-center justify-center rounded self-stretch"
