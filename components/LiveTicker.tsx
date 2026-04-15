@@ -38,34 +38,117 @@ export default function LiveTicker({ extraCost = 0 }: { extraCost?: number }) {
   }, []);
 
   const formatted = formatCurrency(extraCost);
-  const parts = formatted.split(".");
+  // Split into integer and decimal parts
+  const [intPart, decPart] = formatted.split(".");
+
+  // Render each character of the amount as a big-counter digit box
+  function BigCounterDigits({ chars, isDecimal = false }: { chars: string; isDecimal?: boolean }) {
+    return (
+      <>
+        {chars.split("").map((ch, i) => {
+          const isNum = /\d/.test(ch);
+          if (!isNum) {
+            // comma separator
+            return (
+              <span
+                key={i}
+                className="font-mono font-black self-end pb-2 select-none"
+                style={{
+                  fontSize: "clamp(1.2rem, 3vw, 2.5rem)",
+                  color: "#9ca3af",
+                  lineHeight: 1,
+                  padding: "0 2px",
+                }}
+              >
+                {ch}
+              </span>
+            );
+          }
+          return (
+            <div
+              key={i}
+              className="flex items-center justify-center rounded"
+              style={{
+                background: "linear-gradient(180deg, #1c1c1c 0%, #111111 100%)",
+                border: "1px solid #2d2d2d",
+                boxShadow: "inset 0 2px 4px rgba(0,0,0,0.6), 0 1px 0 #3a3a3a",
+                minWidth: isDecimal ? "clamp(1.4rem, 3.5vw, 3rem)" : "clamp(2rem, 5vw, 4.5rem)",
+                height: isDecimal ? "clamp(2rem, 5vw, 4rem)" : "clamp(3rem, 8vw, 7rem)",
+                padding: "0 clamp(2px, 0.4vw, 6px)",
+              }}
+            >
+              <span
+                className="font-mono font-black ticker-glow tabular-nums"
+                style={{
+                  fontSize: isDecimal ? "clamp(1.2rem, 3vw, 2.6rem)" : "clamp(1.8rem, 6vw, 5.5rem)",
+                  color: isDecimal ? "#fca5a5" : "#F87171",
+                  lineHeight: 1,
+                  textShadow: "0 0 20px rgba(248,113,113,0.5)",
+                }}
+              >
+                {ch}
+              </span>
+            </div>
+          );
+        })}
+      </>
+    );
+  }
 
   return (
     <div className="w-full py-8 px-4 flex flex-col items-center">
       {/* Main ticker */}
       <div className="relative flex flex-col items-center">
-        <div className="text-xs uppercase tracking-[0.3em] text-gray-500 mb-3 font-medium">
-          Total Live Cost (USD)
-        </div>
-        <div className="flex items-baseline gap-1">
-          <span className="text-2xl font-mono font-bold mt-1" style={{ color: "#F87171" }}>$</span>
-          <span
-            className="font-mono font-black ticker-glow"
+        <h1
+          className="font-black uppercase tracking-[0.18em] text-white mb-4 text-center"
+          style={{ fontSize: "clamp(1rem, 3.5vw, 1.75rem)", letterSpacing: "0.18em" }}
+        >
+          SENTINELPAY : VIP SERVICE PAYMENT TRACKER
+        </h1>
+
+        {/* Big-counter style digit display */}
+        <div className="flex items-center gap-[3px] flex-wrap justify-center">
+          {/* Dollar sign box */}
+          <div
+            className="flex items-center justify-center rounded self-stretch"
             style={{
-              fontSize: "clamp(3rem, 8vw, 7rem)",
-              color: "#F87171",
-              letterSpacing: "-0.02em",
-              lineHeight: 1,
+              background: "linear-gradient(180deg, #1c1c1c 0%, #111111 100%)",
+              border: "1px solid #2d2d2d",
+              boxShadow: "inset 0 2px 4px rgba(0,0,0,0.6), 0 1px 0 #3a3a3a",
+              minWidth: "clamp(1.4rem, 3vw, 3rem)",
+              padding: "0 clamp(4px, 0.6vw, 8px)",
             }}
           >
-            {parts[0]}
-          </span>
+            <span
+              className="font-mono font-bold"
+              style={{
+                fontSize: "clamp(1rem, 2.5vw, 2rem)",
+                color: "#9ca3af",
+                lineHeight: 1,
+              }}
+            >
+              $
+            </span>
+          </div>
+
+          {/* Integer digits */}
+          <BigCounterDigits chars={intPart} />
+
+          {/* Decimal separator */}
           <span
-            className="font-mono font-black"
-            style={{ fontSize: "clamp(1.5rem, 4vw, 3.5rem)", lineHeight: 1, color: "#F87171" }}
+            className="font-mono font-black self-end pb-1 select-none"
+            style={{
+              fontSize: "clamp(1.2rem, 3vw, 2.5rem)",
+              color: "#9ca3af",
+              lineHeight: 1,
+              padding: "0 2px",
+            }}
           >
-            .{parts[1]}
+            .
           </span>
+
+          {/* Decimal digits */}
+          <BigCounterDigits chars={decPart} isDecimal />
         </div>
 
         {/* Pulsing border under ticker */}

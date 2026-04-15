@@ -11,20 +11,33 @@ import {
   Sparkles,
   CheckCircle2,
 } from "lucide-react";
-import AIBreakdown from "./AIBreakdown";
+import AIBreakdown, { AI_TOTAL_ESTIMATE } from "./AIBreakdown";
 import ModelVersionPanel from "./ModelVersionPanel";
 
 export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost: number) => void }) {
   const [isAdd, setIsAdd] = useState(true);
   const [text, setText] = useState("提供一個 Common KM generator AI Agent with AI Chatbot feature");
+  const [amountInput, setAmountInput] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<"idle" | "analyzing" | "done">("idle");
   const [submitted, setSubmitted] = useState(false);
-  const [taskIsAdd, setTaskIsAdd] = useState(true);
   const fileRef = useRef<HTMLInputElement>(null);
+  const amountInputId = "payment-amount-input";
+  const amountHintId = "payment-amount-hint";
 
   const MODEL_VERSION = "gpt-4o-2024-11-20";
+
+  const formatAmount = (value: string) => {
+    const digits = value.replace(/[^\d]/g, "");
+    if (!digits) return "";
+    return Number(digits).toLocaleString("en-US");
+  };
+
+  const getAmountValue = () => {
+    const parsed = Number(amountInput.replace(/,/g, ""));
+    return Number.isFinite(parsed) ? parsed : 0;
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
@@ -41,7 +54,6 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
     setLoading(true);
     setResult("analyzing");
     setSubmitted(false);
-    setTaskIsAdd(isAdd);
     // Simulate AI analysis delay
     await new Promise((r) => setTimeout(r, 2200));
     setLoading(false);
@@ -49,9 +61,13 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
   };
 
   const handleSubmit = () => {
-    if (onCostAdded) onCostAdded(taskIsAdd ? 87500 : -87500);
+    const amount = getAmountValue();
+    if (!amount) return;
+    if (onCostAdded) onCostAdded(isAdd ? amount : -amount);
     setSubmitted(true);
   };
+
+  const amountValue = getAmountValue();
 
   return (
     <div
@@ -140,40 +156,72 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
               />
             </div>
 
-            <button
-              onClick={handleStartTask}
-              disabled={loading || !text.trim()}
-              className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                loading || !text.trim()
-                  ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                  : "bg-blue-600 hover:bg-blue-500 text-white shadow shadow-blue-500/20"
-              }`}
-            >
-              {loading ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" /> Analyzing…
-                </>
-              ) : (
-                <>
-                  <Play size={13} /> Start Task
-                </>
-              )}
-            </button>
-            {result === "done" && (
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleSubmit}
-                disabled={submitted}
+                onClick={handleStartTask}
+                disabled={loading || !text.trim()}
                 className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
-                  submitted
+                  loading || !text.trim()
                     ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                    : "bg-green-600 hover:bg-green-500 text-white shadow shadow-green-500/20"
+                    : "bg-blue-600 hover:bg-blue-500 text-white shadow shadow-blue-500/20"
                 }`}
               >
-                <CheckCircle2 size={14} />
-                {submitted ? "Submitted" : "Submit"}
+                {loading ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" /> Analyzing…
+                  </>
+                ) : (
+                  <>
+                    <Play size={13} /> Start Task
+                  </>
+                )}
               </button>
-            )}
+              {result === "done" && (
+                <>
+                  <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1">
+                    <label htmlFor={amountInputId} className="text-xs text-gray-400">
+                      Amount (USD)
+                    </label>
+                    <input
+                      id={amountInputId}
+                      inputMode="numeric"
+                      value={amountInput}
+                      onChange={(e) => setAmountInput(formatAmount(e.target.value))}
+                      placeholder="0"
+                      aria-describedby={amountHintId}
+                      className="w-24 bg-transparent text-sm text-gray-200 outline-none placeholder-gray-600"
+                    />
+                    <button
+                      onClick={() => setAmountInput(AI_TOTAL_ESTIMATE.toLocaleString("en-US"))}
+                      className="text-blue-400 hover:text-blue-300 transition-colors"
+                      aria-label="Use AI estimate total"
+                      title="Use AI estimate total"
+                    >
+                      <Sparkles size={14} />
+                    </button>
+                  </div>
+                  <button
+                    onClick={handleSubmit}
+                    disabled={submitted || amountValue <= 0}
+                    aria-describedby={amountHintId}
+                    className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-sm font-semibold transition-all ${
+                      submitted || amountValue <= 0
+                        ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                        : "bg-green-600 hover:bg-green-500 text-white shadow shadow-green-500/20"
+                    }`}
+                  >
+                    <CheckCircle2 size={14} />
+                    {submitted ? "Submitted" : "Submit"}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
+          {result === "done" && (
+            <p id={amountHintId} className="sr-only">
+              Enter an amount greater than zero or use the AI icon to fill the estimated total.
+            </p>
+          )}
         </div>
 
         {/* Type indicator */}
