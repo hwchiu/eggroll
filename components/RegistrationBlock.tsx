@@ -180,7 +180,7 @@ export default function RegistrationBlock({ onCostAdded }: { onCostAdded?: (cost
                 <>
                   <div className="flex items-center gap-2 rounded-lg border border-gray-700 bg-gray-900 px-2 py-1">
                     <label htmlFor={amountInputId} className="text-xs text-gray-400">
-                      Amount (USD)
+                      Amount (NTD)
                     </label>
                     <input
                       id={amountInputId}
