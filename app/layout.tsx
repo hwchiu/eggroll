@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Payment Tracker — Live Cost Ticker",
-  description: "Real-time AI service payment tracker with live cost accumulation",
+  title: "CHR Card Duel Arena",
+  description: "Pokemon vs Melody two-player card duel with persistent battle records",
 };
 
 export default function RootLayout({

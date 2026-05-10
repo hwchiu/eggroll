@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 
 type CellData = { date: string; count: number; amount: number };
 
@@ -31,7 +31,7 @@ function generateContribData(): CellData[] {
 
   const eventMap = new Map(events.map((e) => [e.date, e]));
 
-  let cursor = new Date(start);
+  const cursor = new Date(start);
   while (cursor <= now) {
     const iso = cursor.toISOString().split("T")[0];
     const ev = eventMap.get(iso);
@@ -57,14 +57,8 @@ const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov
 const DAYS = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
 
 export default function ContributionGraph() {
-  const [cells, setCells] = useState<CellData[]>([]);
+  const cells = generateContribData();
   const [showComingSoon, setShowComingSoon] = useState(false);
-
-  useEffect(() => {
-    setCells(generateContribData());
-  }, []);
-
-  if (cells.length === 0) return null;
 
   // Group by week columns
   const weeks: CellData[][] = [];
@@ -143,7 +137,7 @@ export default function ContributionGraph() {
               <div className="flex gap-px">
                 {weeks.map((week, wi) => (
                   <div key={wi} className="flex flex-col gap-px">
-                    {week.map((cell, di) => (
+                    {week.map((cell) => (
                       <div
                         key={cell.date}
                         className="contribution-cell cursor-pointer"
