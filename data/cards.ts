@@ -10,7 +10,7 @@ export interface DuelCard {
   command: string;
   /** URL for the card illustration (Pokemon official artwork) */
   image?: string;
-  /** Emoji art used as fallback on specific cards */
+  /** Emoji art used on preview/coming-soon cards */
   emoji?: string;
   isComingSoon?: boolean;
 }
@@ -157,6 +157,11 @@ const MELODY_IMAGE_URLS: string[] = [
 const POKEAPI_ARTWORK_BASE =
   "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork";
 
+function getMelodyImage(index: number): string | undefined {
+  if (MELODY_IMAGE_URLS.length === 0) return undefined;
+  return MELODY_IMAGE_URLS[index % MELODY_IMAGE_URLS.length];
+}
+
 function buildCards(faction: Faction, titles: string[], subtitlePrefix: string): DuelCard[] {
   return titles.map((title, index) => {
     const score = index % 3 === 0 ? -(2 + (index % 7)) : 2 + (index % 9);
@@ -167,7 +172,7 @@ function buildCards(faction: Faction, titles: string[], subtitlePrefix: string):
       faction === "pokemon" && index < POKEMON_POKEDEX_IDS.length
         ? `${POKEAPI_ARTWORK_BASE}/${POKEMON_POKEDEX_IDS[index]}.png`
         : faction === "melody"
-          ? MELODY_IMAGE_URLS[index % MELODY_IMAGE_URLS.length]
+          ? getMelodyImage(index)
         : undefined;
 
     return {
@@ -208,7 +213,7 @@ export const melodyCards: DuelCard[] = [
     styleLabel: "Preview",
     score: 0,
     command: "0 分：節慶活動卡正在準備中！",
-    image: MELODY_IMAGE_URLS[0],
+    image: getMelodyImage(0),
     isComingSoon: true,
   },
 ];
