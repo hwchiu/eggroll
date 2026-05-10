@@ -166,7 +166,7 @@ function buildCards(faction: Faction, titles: string[], subtitlePrefix: string):
     const image =
       faction === "pokemon" && index < POKEMON_POKEDEX_IDS.length
         ? `${POKEAPI_ARTWORK_BASE}/${POKEMON_POKEDEX_IDS[index]}.png`
-        : faction === "melody" && MELODY_IMAGE_URLS.length > 0
+        : faction === "melody"
           ? MELODY_IMAGE_URLS[index % MELODY_IMAGE_URLS.length]
         : undefined;
 
