@@ -10,7 +10,7 @@ export interface DuelCard {
   command: string;
   /** URL for the card illustration (Pokemon official artwork) */
   image?: string;
-  /** Emoji art used on preview/coming-soon cards */
+  /** Emoji art used for Melody cards instead of a photo */
   emoji?: string;
   isComingSoon?: boolean;
 }
@@ -153,6 +153,16 @@ const MELODY_IMAGE_URLS: string[] = [
   "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/my-melody-sakura-acrylic-keychain-sanrio-473839_600x.jpg",
 ];
 
+// Emojis used as card art for Melody faction (fallback when image fails to load)
+const MELODY_EMOJIS: string[] = [
+  "🍓", "😴", "🎀", "☁️", "🌸",
+  "⭐", "🤗", "🥧", "🌈", "🍑",
+  "🌷", "🧁", "✨", "🌹", "🍰",
+  "🌙", "🫐", "🐰", "🎉", "💜",
+  "💌", "👑", "🥤", "🙏", "🧸",
+  "🎡", "🌅", "🎗️", "💎", "🍦",
+];
+
 // Base URL for Pokémon official artwork (via PokeAPI sprite repository)
 const POKEAPI_ARTWORK_BASE =
   "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork";
@@ -173,6 +183,11 @@ function buildCards(faction: Faction, titles: string[], subtitlePrefix: string):
         ? `${POKEAPI_ARTWORK_BASE}/${POKEMON_POKEDEX_IDS[index]}.png`
         : faction === "melody"
           ? getMelodyImage(index)
+          : undefined;
+
+    const emoji =
+      faction === "melody" && index < MELODY_EMOJIS.length
+        ? MELODY_EMOJIS[index]
         : undefined;
 
     return {
@@ -184,6 +199,7 @@ function buildCards(faction: Faction, titles: string[], subtitlePrefix: string):
       score,
       command: `${score >= 0 ? "+" : ""}${score} 分：${message}`,
       image,
+      emoji,
     };
   });
 }
@@ -214,6 +230,7 @@ export const melodyCards: DuelCard[] = [
     score: 0,
     command: "0 分：節慶活動卡正在準備中！",
     image: getMelodyImage(0),
+    emoji: "🎁",
     isComingSoon: true,
   },
 ];
