@@ -1,278 +1,406 @@
 "use client";
-import { useState } from "react";
-import LiveTicker from "@/components/LiveTicker";
-import RegistrationBlock from "@/components/RegistrationBlock";
-import ShareRow from "@/components/ShareRow";
-import EstimationHistory from "@/components/EstimationHistory";
-import ContributionGraph from "@/components/ContributionGraph";
-import { Activity, DollarSign, Zap, BarChart2, KeyRound, X, CheckCircle2, AlertCircle, Gem } from "lucide-react";
 
-const RESET_PASSWORD = "長官是最棒的";
+import { useEffect, useMemo, useState } from "react";
+import { deckByFaction, type DuelCard, type Faction } from "@/data/cards";
+import { Clock3, Settings2, Swords, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+
+const START_DATE = new Date("2026-04-01T03:00:00");
+const STORAGE_KEY = "eggroll-duel-arena-v1";
+
+type SideState = {
+  score: number;
+  received: PlayedCard[];
+};
+
+type PlayedCard = {
+  instanceId: string;
+  from: Faction;
+  to: Faction;
+  title: string;
+  subtitle: string;
+  score: number;
+  command: string;
+  playedAt: string;
+};
+
+type ArenaTheme = "stadium-night" | "forest-festival" | "pink-fair";
+
+type DuelState = {
+  activeAttacker: Faction;
+  pokemon: SideState;
+  melody: SideState;
+  expandedReceived: Record<Faction, boolean>;
+  arenaTheme: ArenaTheme;
+};
+
+const DEFAULT_STATE: DuelState = {
+  activeAttacker: "pokemon",
+  pokemon: { score: 0, received: [] },
+  melody: { score: 0, received: [] },
+  expandedReceived: { pokemon: false, melody: false },
+  arenaTheme: "stadium-night",
+};
+
+const ARENA_THEMES: Record<ArenaTheme, { name: string; appBg: string; topBg: string; bottomBg: string; cardBorder: string }> = {
+  "stadium-night": {
+    name: "Stadium Night",
+    appBg: "linear-gradient(180deg, #0a1020 0%, #071015 100%)",
+    topBg: "radial-gradient(circle at 20% 20%, rgba(59,130,246,0.25), transparent 55%), #0f1f3a",
+    bottomBg: "radial-gradient(circle at 80% 30%, rgba(244,114,182,0.22), transparent 58%), #2d1539",
+    cardBorder: "#1f2937",
+  },
+  "forest-festival": {
+    name: "Forest Festival",
+    appBg: "linear-gradient(180deg, #0b1a16 0%, #11221e 100%)",
+    topBg: "radial-gradient(circle at 10% 10%, rgba(34,197,94,0.20), transparent 60%), #12352c",
+    bottomBg: "radial-gradient(circle at 90% 20%, rgba(163,230,53,0.18), transparent 60%), #2a3a19",
+    cardBorder: "#2f4f46",
+  },
+  "pink-fair": {
+    name: "Pink Fair",
+    appBg: "linear-gradient(180deg, #180b18 0%, #220f2f 100%)",
+    topBg: "radial-gradient(circle at 20% 20%, rgba(167,139,250,0.25), transparent 58%), #271944",
+    bottomBg: "radial-gradient(circle at 85% 15%, rgba(244,114,182,0.24), transparent 58%), #4b1642",
+    cardBorder: "#503159",
+  },
+};
+
+function getReceiver(attacker: Faction): Faction {
+  return attacker === "pokemon" ? "melody" : "pokemon";
+}
+
+function timerText(elapsed: number): string {
+  const d = Math.floor(elapsed / 86400);
+  const h = Math.floor((elapsed % 86400) / 3600);
+  const m = Math.floor((elapsed % 3600) / 60);
+  const s = Math.floor(elapsed % 60);
+  return `${String(d).padStart(2, "0")}:${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString("zh-TW", { hour12: false });
+}
 
 export default function Home() {
-  const [extraCost, setExtraCost] = useState(0);
+  const [duel, setDuel] = useState<DuelState>(DEFAULT_STATE);
+  const [mounted, setMounted] = useState(false);
+  const [showCardPicker, setShowCardPicker] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [elapsed, setElapsed] = useState(0);
 
-  // Reset modal state
-  const [showResetModal, setShowResetModal] = useState(false);
-  const [resetStep, setResetStep] = useState<"input" | "success">("input");
-  const [passwordInput, setPasswordInput] = useState("");
-  const [passwordError, setPasswordError] = useState(false);
-
-  const openResetModal = () => {
-    setResetStep("input");
-    setPasswordInput("");
-    setPasswordError(false);
-    setShowResetModal(true);
-  };
-
-  const closeResetModal = () => {
-    setShowResetModal(false);
-    setPasswordInput("");
-    setPasswordError(false);
-    setResetStep("input");
-  };
-
-  const handlePasswordSubmit = () => {
-    if (passwordInput === RESET_PASSWORD) {
-      setPasswordError(false);
-      setResetStep("success");
-    } else {
-      setPasswordError(true);
+  useEffect(() => {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as DuelState;
+        setDuel({ ...DEFAULT_STATE, ...parsed });
+      } catch {
+        setDuel(DEFAULT_STATE);
+      }
     }
+    setMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const updateElapsed = () => {
+      const sec = Math.max(0, Math.floor((Date.now() - START_DATE.getTime()) / 1000));
+      setElapsed(sec);
+    };
+
+    updateElapsed();
+    const id = window.setInterval(updateElapsed, 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(duel));
+  }, [duel, mounted]);
+
+  const attacker = duel.activeAttacker;
+  const receiver = getReceiver(attacker);
+  const attackerDeck = deckByFaction[attacker];
+  const activeTheme = ARENA_THEMES[duel.arenaTheme];
+
+  const battleStats = useMemo(
+    () => ({
+      pokemonSent: duel.melody.received.length,
+      melodySent: duel.pokemon.received.length,
+      totalPlays: duel.pokemon.received.length + duel.melody.received.length,
+    }),
+    [duel]
+  );
+
+  const playCard = (card: DuelCard) => {
+    if (card.isComingSoon) return;
+
+    const to = getReceiver(duel.activeAttacker);
+    const played: PlayedCard = {
+      instanceId: `${card.id}-${Date.now()}`,
+      from: duel.activeAttacker,
+      to,
+      title: card.title,
+      subtitle: card.subtitle,
+      score: card.score,
+      command: card.command,
+      playedAt: new Date().toISOString(),
+    };
+
+    setDuel((prev) => ({
+      ...prev,
+      [to]: {
+        ...prev[to],
+        score: prev[to].score + card.score,
+        received: [played, ...prev[to].received],
+      },
+    }));
+
+    setShowCardPicker(false);
   };
 
-  const handleResetConfirm = () => {
-    setExtraCost(0);
-    closeResetModal();
+  const swapTurn = () => {
+    setDuel((prev) => ({ ...prev, activeAttacker: getReceiver(prev.activeAttacker) }));
+  };
+
+  const toggleExpand = (faction: Faction) => {
+    setDuel((prev) => ({
+      ...prev,
+      expandedReceived: {
+        ...prev.expandedReceived,
+        [faction]: !prev.expandedReceived[faction],
+      },
+    }));
+  };
+
+  const resetDuel = () => {
+    setDuel(DEFAULT_STATE);
+    setShowSettings(false);
+    setShowCardPicker(false);
+  };
+
+  const sidePanel = (faction: Faction, title: string) => {
+    const side = duel[faction];
+    const isAttacker = duel.activeAttacker === faction;
+    const isExpanded = duel.expandedReceived[faction];
+    const cards = isExpanded ? side.received : side.received.slice(0, 4);
+    const sideBg = faction === "pokemon" ? activeTheme.topBg : activeTheme.bottomBg;
+
+    return (
+      <section
+        className="rounded-2xl border p-4 md:p-5"
+        style={{
+          background: sideBg,
+          borderColor: activeTheme.cardBorder,
+          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 24px rgba(0,0,0,0.25)",
+        }}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs uppercase tracking-[0.22em] text-gray-400">{title}</div>
+            <h2 className="text-lg font-bold text-white mt-1">{faction === "pokemon" ? "寶可夢 CHR 陣營" : "美樂蒂 CHR 陣營"}</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${isAttacker ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-600/30 text-slate-300"}`}>
+              {isAttacker ? "當前出牌方" : "當前接收方"}
+            </span>
+            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-white/10 text-gray-200">
+              牌組 {deckByFaction[faction].length} 張
+            </span>
+          </div>
+        </div>
+
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-xl border p-3 bg-black/20 border-white/10">
+            <div className="text-xs text-gray-400">對戰分數</div>
+            <div className={`mt-1 font-mono text-3xl font-black ${side.score >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+              {side.score >= 0 ? "+" : ""}
+              {side.score}
+            </div>
+          </div>
+          <div className="rounded-xl border p-3 bg-black/20 border-white/10">
+            <div className="text-xs text-gray-400">已接收牌數</div>
+            <div className="mt-1 font-mono text-2xl font-bold text-cyan-200">{side.received.length}</div>
+          </div>
+          <div className="rounded-xl border p-3 bg-black/20 border-white/10">
+            <div className="text-xs text-gray-400">最新指令效果</div>
+            <div className="mt-1 text-xs text-white line-clamp-2">{side.received[0]?.command ?? "尚未接收卡牌"}</div>
+          </div>
+          <div className="rounded-xl border p-3 bg-black/20 border-white/10">
+            <div className="text-xs text-gray-400">最後更新</div>
+            <div className="mt-1 text-xs text-gray-200">{side.received[0] ? formatDate(side.received[0].playedAt) : "-"}</div>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-semibold text-white">接收檯面</div>
+            {side.received.length > 4 && (
+              <button
+                onClick={() => toggleExpand(faction)}
+                className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200"
+              >
+                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                {isExpanded ? "縮合" : "展開"}
+              </button>
+            )}
+          </div>
+          {side.received.length === 0 ? (
+            <p className="mt-3 text-xs text-gray-400">目前無卡牌。</p>
+          ) : (
+            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 max-h-72 overflow-auto pr-1">
+              {cards.map((played) => (
+                <article key={played.instanceId} className="rounded-lg border border-white/10 bg-white/5 p-2.5">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-xs text-gray-400">{played.subtitle}</div>
+                      <div className="text-sm font-semibold text-white truncate">{played.title}</div>
+                    </div>
+                    <div className={`font-mono text-sm font-bold ${played.score >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                      {played.score >= 0 ? "+" : ""}
+                      {played.score}
+                    </div>
+                  </div>
+                  <div className="mt-2 text-xs text-gray-300">{played.command}</div>
+                </article>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+    );
   };
 
   return (
-    <div
-      className="min-h-screen"
-      style={{ background: "#0a0a0a" }}
-    >
-      {/* Top nav */}
-      <nav
-        className="sticky top-0 z-40 border-b"
-        style={{ background: "rgba(10,10,10,0.85)", backdropFilter: "blur(12px)", borderColor: "#1a1a1a" }}
-      >
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-red-500/10">
-              <DollarSign size={16} className="text-red-400" />
+    <main className="min-h-screen" style={{ background: activeTheme.appBg }}>
+      <div className="mx-auto max-w-6xl px-3 sm:px-4 py-4 sm:py-6">
+        <header className="rounded-2xl border border-white/10 bg-black/25 backdrop-blur-sm p-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">雙人 CHR 卡牌對戰場</h1>
+              <p className="mt-1 text-xs sm:text-sm text-gray-300">上下分區攻防、分數即時累積、操作可續玩、支援行動裝置。</p>
             </div>
-            <span className="font-bold text-white text-sm tracking-tight">Payment Tracker</span>
-            <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-500/10 text-red-400 uppercase tracking-wide">
-              Live
-            </span>
+            <div className="flex items-center gap-2 sm:gap-3">
+              <div className="rounded-xl border border-orange-400/30 bg-orange-500/10 px-3 py-2 text-right">
+                <div className="flex items-center justify-end gap-1 text-[11px] text-orange-200"><Clock3 size={12} /> 時間計算器</div>
+                <div className="font-mono text-sm sm:text-base font-bold text-orange-100">{timerText(elapsed)}</div>
+              </div>
+              <button
+                onClick={() => setShowSettings(true)}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10"
+              >
+                <Settings2 size={14} /> Settings
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-sky-400/30 bg-sky-400/5">
-              <Gem size={13} className="text-sky-300" />
-              <span className="text-xs font-semibold text-sky-300 tracking-wide">Diamond Member</span>
+
+          <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
+            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+              <div className="text-[11px] text-gray-400">總出牌次數</div>
+              <div className="font-mono text-lg font-bold text-cyan-200">{battleStats.totalPlays}</div>
             </div>
-            <button
-              onClick={openResetModal}
-              className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-orange-400 transition-colors"
-              title="Reset total"
-            >
-              <KeyRound size={14} />
-              Reset
-            </button>
-            <div className="hidden sm:flex items-center gap-1 text-xs text-gray-500">
-              <Activity size={12} className="text-green-400 animate-pulse" />
-              <span>Real-time</span>
+            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+              <div className="text-[11px] text-gray-400">寶可夢出牌</div>
+              <div className="font-mono text-lg font-bold text-blue-200">{battleStats.pokemonSent}</div>
             </div>
-            <a
-              href="https://github.com/hwchiu/eggroll"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
-            >
-              GitHub
-            </a>
+            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+              <div className="text-[11px] text-gray-400">美樂蒂出牌</div>
+              <div className="font-mono text-lg font-bold text-pink-200">{battleStats.melodySent}</div>
+            </div>
           </div>
-        </div>
-      </nav>
 
-      {/* Hero / Ticker section */}
-      <div
-        className="relative border-b overflow-hidden"
-        style={{ borderColor: "#1a1a1a" }}
-      >
-        {/* Background glow */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{
-            background: "radial-gradient(ellipse 80% 60% at 50% 40%, rgba(239,68,68,0.07) 0%, transparent 70%)",
-          }}
-        />
-        <div
-          className="absolute bottom-0 left-0 right-0 h-px"
-          style={{
-            background: "linear-gradient(90deg, transparent 0%, rgba(239,68,68,0.4) 50%, transparent 100%)",
-          }}
-        />
-        <div className="max-w-5xl mx-auto px-4">
-          <LiveTicker extraCost={extraCost} />
-        </div>
-      </div>
-
-      {/* Quick stats */}
-      <div className="max-w-5xl mx-auto px-4 py-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          {[
-            { label: "Active Services", value: "3", icon: <Zap size={14} />, color: "text-green-400", bg: "bg-green-500/10" },
-            { label: "Total Projects", value: "6", icon: <BarChart2 size={14} />, color: "text-blue-400", bg: "bg-blue-500/10" },
-            { label: "Avg Confidence", value: "82%", icon: <Activity size={14} />, color: "text-yellow-400", bg: "bg-yellow-500/10" },
-            { label: "Net Estimate", value: "$264K", icon: <DollarSign size={14} />, color: "text-red-400", bg: "bg-red-500/10" },
-          ].map((stat) => (
-            <div
-              key={stat.label}
-              className="flex items-center gap-3 rounded-xl border px-4 py-3"
-              style={{ background: "#111827", borderColor: "#1f2937" }}
-            >
-              <div className={`p-1.5 rounded-lg ${stat.bg} ${stat.color} shrink-0`}>
-                {stat.icon}
-              </div>
-              <div>
-                <div className={`font-mono font-bold text-base ${stat.color}`}>{stat.value}</div>
-                <div className="text-xs text-gray-500">{stat.label}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Main content */}
-      <div className="max-w-5xl mx-auto px-4 pb-16 space-y-4">
-        {/* Registration block — ABOVE share row */}
-        <RegistrationBlock onCostAdded={(c) => setExtraCost((prev) => prev + c)} />
-
-        {/* Share row */}
-        <ShareRow />
-
-        {/* Contribution Graph */}
-        <ContributionGraph />
-
-        {/* Estimation History */}
-        <EstimationHistory />
-      </div>
-
-      {/* Footer */}
-      <div
-        className="border-t py-6 text-center"
-        style={{ borderColor: "#1a1a1a" }}
-      >
-        <div className="text-xs text-gray-600">
-          Payment Tracker — Live AI cost monitoring •{" "}
-          <span className="text-gray-500">Powered by Next.js</span>
-        </div>
-      </div>
-
-      {/* Reset Modal */}
-      {showResetModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="reset-modal-title"
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
-          onKeyDown={(e) => e.key === "Escape" && closeResetModal()}
-        >
-          <div
-            className="relative w-full max-w-sm mx-4 rounded-2xl border p-6 shadow-2xl"
-            style={{ background: "#0f172a", borderColor: "#1e3a5f" }}
-          >
-            {/* Close button */}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
             <button
-              onClick={closeResetModal}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-300 transition-colors"
-              aria-label="Close"
+              onClick={() => setShowCardPicker(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
             >
-              <X size={16} />
+              <Swords size={15} /> 出牌 Action（{attacker === "pokemon" ? "寶可夢" : "美樂蒂"}）
             </button>
+            <button
+              onClick={swapTurn}
+              className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15"
+            >
+              <RefreshCw size={14} /> 上下方轉至
+            </button>
+            <span className="text-xs text-gray-300">目前由「{attacker === "pokemon" ? "寶可夢" : "美樂蒂"}」對「{receiver === "pokemon" ? "寶可夢" : "美樂蒂"}」出牌</span>
+          </div>
+        </header>
 
-            <div className="flex items-center gap-3 mb-5">
-              <div className="p-2 rounded-lg bg-orange-500/10">
-                <KeyRound size={18} className="text-orange-400" />
-              </div>
+        <div className="mt-4 space-y-4">
+          {sidePanel("pokemon", "上方玩家")}
+          {sidePanel("melody", "下方玩家")}
+        </div>
+
+        <footer className="mt-5 text-center text-xs text-gray-400">對戰風格參考卡牌對戰介面｜含 CHR 風格牌組、分數計算、持久化存檔</footer>
+      </div>
+
+      {showCardPicker && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm p-3 sm:p-6" role="dialog" aria-modal="true">
+          <div className="mx-auto max-w-4xl rounded-2xl border border-white/15 bg-slate-950 p-4">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <div id="reset-modal-title" className="text-sm font-semibold text-white">Reset Total</div>
-                <div className="text-xs text-gray-500 mt-0.5">Enter the secret password to proceed</div>
+                <div className="text-sm font-semibold text-white">選擇要出給對手的卡牌</div>
+                <div className="text-xs text-gray-400">目前可選 {attackerDeck.length - 1} 張主卡 + Coming Soon 預告卡</div>
               </div>
+              <button onClick={() => setShowCardPicker(false)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-200 hover:bg-white/10">關閉</button>
             </div>
 
-            {resetStep === "input" && (
-              <>
-                <label className="block text-xs text-gray-400 mb-2">通關密碼</label>
-                <input
-                  type="password"
-                  value={passwordInput}
-                  onChange={(e) => {
-                    setPasswordInput(e.target.value);
-                    setPasswordError(false);
-                  }}
-                  onKeyDown={(e) => e.key === "Enter" && handlePasswordSubmit()}
-                  placeholder="請輸入通關密碼…"
-                  className="w-full rounded-lg border px-3 py-2 text-sm text-gray-200 placeholder-gray-600 outline-none focus:border-blue-500/60 transition-colors"
-                  style={{ background: "#111827", borderColor: passwordError ? "#ef4444" : "#1f2937" }}
-                  autoFocus
-                />
-                {passwordError && (
-                  <div className="flex items-center gap-1.5 mt-2 text-xs text-red-400">
-                    <AlertCircle size={12} />
-                    密碼錯誤，請再試一次
+            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[70vh] overflow-auto pr-1">
+              {attackerDeck.map((card) => (
+                <article
+                  key={card.id}
+                  className={`rounded-xl border p-3 ${card.isComingSoon ? "border-amber-400/30 bg-amber-500/10" : "border-white/10 bg-white/5"}`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="text-[11px] text-gray-400">{card.subtitle}</div>
+                      <h3 className="text-sm font-bold text-white mt-0.5">{card.title}</h3>
+                      <div className="mt-1 text-[11px] text-cyan-200">{card.styleLabel}</div>
+                    </div>
+                    <div className={`font-mono text-sm font-black ${card.score >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
+                      {card.score >= 0 ? "+" : ""}{card.score}
+                    </div>
                   </div>
-                )}
-                <div className="flex justify-end gap-2 mt-5">
+                  <p className="mt-2 text-xs text-gray-300 min-h-10">{card.command}</p>
                   <button
-                    onClick={closeResetModal}
-                    className="px-4 py-1.5 rounded-lg text-xs text-gray-500 hover:text-gray-300 border border-gray-700 hover:border-gray-500 transition-all"
+                    onClick={() => playCard(card)}
+                    disabled={card.isComingSoon}
+                    className={`mt-3 w-full rounded-lg px-3 py-2 text-xs font-semibold ${card.isComingSoon ? "cursor-not-allowed bg-white/10 text-gray-400" : "bg-cyan-500 text-cyan-950 hover:bg-cyan-400"}`}
                   >
-                    取消
+                    {card.isComingSoon ? "Coming Soon" : "選擇此卡出牌"}
                   </button>
-                  <button
-                    onClick={handlePasswordSubmit}
-                    disabled={!passwordInput}
-                    className={`px-4 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                      !passwordInput
-                        ? "bg-gray-700 text-gray-500 cursor-not-allowed"
-                        : "bg-blue-600 hover:bg-blue-500 text-white"
-                    }`}
-                  >
-                    確認
-                  </button>
-                </div>
-              </>
-            )}
-
-            {resetStep === "success" && (
-              <>
-                <div className="flex flex-col items-center gap-3 py-2">
-                  <CheckCircle2 size={40} className="text-green-400" />
-                  <div className="text-lg font-bold text-green-400">通關成功</div>
-                  <div className="text-xs text-gray-500 text-center">確定要將總金額歸零嗎？</div>
-                </div>
-                <div className="flex justify-end gap-2 mt-5">
-                  <button
-                    onClick={closeResetModal}
-                    className="px-4 py-1.5 rounded-lg text-xs text-gray-500 hover:text-gray-300 border border-gray-700 hover:border-gray-500 transition-all"
-                  >
-                    取消
-                  </button>
-                  <button
-                    onClick={handleResetConfirm}
-                    className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-red-600 hover:bg-red-500 text-white transition-all"
-                  >
-                    確定歸零
-                  </button>
-                </div>
-              </>
-            )}
+                </article>
+              ))}
+            </div>
           </div>
         </div>
       )}
-    </div>
+
+      {showSettings && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm p-3 sm:p-6" role="dialog" aria-modal="true">
+          <div className="mx-auto max-w-lg rounded-2xl border border-white/15 bg-slate-950 p-4">
+            <h3 className="text-sm font-bold text-white">對戰場景設定</h3>
+            <p className="mt-1 text-xs text-gray-400">可切換底部場景與配色，兩方共用。</p>
+            <div className="mt-4 space-y-2">
+              {(Object.keys(ARENA_THEMES) as ArenaTheme[]).map((themeKey) => (
+                <button
+                  key={themeKey}
+                  onClick={() => setDuel((prev) => ({ ...prev, arenaTheme: themeKey }))}
+                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${duel.arenaTheme === themeKey ? "border-cyan-400/60 bg-cyan-500/10 text-cyan-200" : "border-white/10 bg-white/5 text-gray-200"}`}
+                >
+                  {ARENA_THEMES[themeKey].name}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              <button onClick={resetDuel} className="rounded-lg border border-rose-400/40 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-500/10">重置對戰紀錄</button>
+              <button onClick={() => setShowSettings(false)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-100 hover:bg-white/10">完成</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!mounted && <div className="fixed bottom-2 right-2 text-[10px] text-gray-500">loading saved state…</div>}
+    </main>
   );
 }
