@@ -8,6 +8,10 @@ export interface DuelCard {
   styleLabel: string;
   score: number;
   command: string;
+  /** URL for the card illustration (Pokemon official artwork) */
+  image?: string;
+  /** Emoji art used for Melody cards instead of a photo */
+  emoji?: string;
   isComingSoon?: boolean;
 }
 
@@ -99,11 +103,69 @@ const MELODY_TITLES = [
   "美樂蒂香草驚喜",
 ];
 
+// Pokédex IDs for official artwork (one per POKEMON_TITLES entry)
+const POKEMON_POKEDEX_IDS: number[] = [
+  25,  // Pikachu
+  133, // Eevee
+  6,   // Charizard
+  9,   // Blastoise
+  3,   // Venusaur
+  448, // Lucario
+  282, // Gardevoir
+  445, // Garchomp
+  658, // Greninja
+  94,  // Gengar
+  149, // Dragonite
+  38,  // Ninetales
+  130, // Gyarados
+  143, // Snorlax
+  36,  // Clefable
+  26,  // Raichu
+  183, // Marill
+  59,  // Arcanine
+  242, // Blissey
+  212, // Scizor
+  488, // Cresselia
+  157, // Typhlosion
+  470, // Leafeon
+  471, // Glaceon
+  700, // Sylveon
+  248, // Tyranitar
+  384, // Rayquaza
+  386, // Deoxys
+  151, // Mew
+  249, // Lugia
+];
+
+// Emojis used as card art for Melody faction
+const MELODY_EMOJIS: string[] = [
+  "🍓", "😴", "🎀", "☁️", "🌸",
+  "⭐", "🤗", "🥧", "🌈", "🍑",
+  "🌷", "🧁", "✨", "🌹", "🍰",
+  "🌙", "🫐", "🐰", "🎉", "💜",
+  "💌", "👑", "🥤", "🙏", "🧸",
+  "🎡", "🌅", "🎗️", "💎", "🍦",
+];
+
+// Base URL for Pokémon official artwork (via PokeAPI sprite repository)
+const POKEAPI_ARTWORK_BASE =
+  "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork";
+
 function buildCards(faction: Faction, titles: string[], subtitlePrefix: string): DuelCard[] {
   return titles.map((title, index) => {
     const score = index % 3 === 0 ? -(2 + (index % 7)) : 2 + (index % 9);
     const messagePool = score >= 0 ? POSITIVE_MESSAGES : NEGATIVE_MESSAGES;
     const message = messagePool[index % messagePool.length];
+
+    const image =
+      faction === "pokemon" && index < POKEMON_POKEDEX_IDS.length
+        ? `${POKEAPI_ARTWORK_BASE}/${POKEMON_POKEDEX_IDS[index]}.png`
+        : undefined;
+
+    const emoji =
+      faction === "melody" && index < MELODY_EMOJIS.length
+        ? MELODY_EMOJIS[index]
+        : undefined;
 
     return {
       id: `${faction}-${index + 1}`,
@@ -113,6 +175,8 @@ function buildCards(faction: Faction, titles: string[], subtitlePrefix: string):
       styleLabel: "CHR Inspired",
       score,
       command: `${score >= 0 ? "+" : ""}${score} 分：${message}`,
+      image,
+      emoji,
     };
   });
 }
@@ -127,6 +191,7 @@ export const pokemonCards: DuelCard[] = [
     styleLabel: "Preview",
     score: 0,
     command: "0 分：活動卡即將解鎖，敬請期待！",
+    emoji: "🔮",
     isComingSoon: true,
   },
 ];
@@ -141,6 +206,7 @@ export const melodyCards: DuelCard[] = [
     styleLabel: "Preview",
     score: 0,
     command: "0 分：節慶活動卡正在準備中！",
+    emoji: "🎁",
     isComingSoon: true,
   },
 ];
