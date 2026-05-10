@@ -2,7 +2,17 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { deckByFaction, type DuelCard, type Faction } from "@/data/cards";
-import { Clock3, Settings2, Swords, RefreshCw, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Clock3,
+  Settings2,
+  Swords,
+  RefreshCw,
+  ChevronLeft,
+  ChevronRight,
+  X,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from "lucide-react";
 
 const START_DATE = new Date("2026-04-01T03:00:00");
 const STORAGE_KEY = "eggroll-duel-arena-v1";
@@ -29,7 +39,6 @@ type DuelState = {
   activeAttacker: Faction;
   pokemon: SideState;
   melody: SideState;
-  expandedReceived: Record<Faction, boolean>;
   arenaTheme: ArenaTheme;
   nextPlayId: number;
 };
@@ -38,42 +47,55 @@ const DEFAULT_STATE: DuelState = {
   activeAttacker: "pokemon",
   pokemon: { score: 0, received: [] },
   melody: { score: 0, received: [] },
-  expandedReceived: { pokemon: false, melody: false },
   arenaTheme: "stadium-night",
   nextPlayId: 1,
 };
 
-const ARENA_THEMES: Record<ArenaTheme, { name: string; appBg: string; topBg: string; bottomBg: string; cardBorder: string }> = {
+const ARENA_THEMES: Record<
+  ArenaTheme,
+  { name: string; appBg: string; topBg: string; bottomBg: string; divider: string }
+> = {
   "stadium-night": {
     name: "Stadium Night",
     appBg: "linear-gradient(180deg, #0a1020 0%, #071015 100%)",
     topBg: "radial-gradient(circle at 20% 20%, rgba(59,130,246,0.25), transparent 55%), #0f1f3a",
     bottomBg: "radial-gradient(circle at 80% 30%, rgba(244,114,182,0.22), transparent 58%), #2d1539",
-    cardBorder: "#1f2937",
+    divider: "#1e3a5f",
   },
   "forest-festival": {
     name: "Forest Festival",
     appBg: "linear-gradient(180deg, #0b1a16 0%, #11221e 100%)",
     topBg: "radial-gradient(circle at 10% 10%, rgba(34,197,94,0.20), transparent 60%), #12352c",
     bottomBg: "radial-gradient(circle at 90% 20%, rgba(163,230,53,0.18), transparent 60%), #2a3a19",
-    cardBorder: "#2f4f46",
+    divider: "#2f4f46",
   },
   "pink-fair": {
     name: "Pink Fair",
     appBg: "linear-gradient(180deg, #180b18 0%, #220f2f 100%)",
     topBg: "radial-gradient(circle at 20% 20%, rgba(167,139,250,0.25), transparent 58%), #271944",
     bottomBg: "radial-gradient(circle at 85% 15%, rgba(244,114,182,0.24), transparent 58%), #4b1642",
-    cardBorder: "#503159",
+    divider: "#503159",
   },
 };
 
+/* ─────────────────────── helpers ─────────────────────── */
+
 function normalizeState(parsed: unknown): DuelState {
   if (!parsed || typeof parsed !== "object") return DEFAULT_STATE;
-  const input = parsed as Partial<DuelState> & { pokemon?: Partial<SideState>; melody?: Partial<SideState> };
-  const activeAttacker = input.activeAttacker === "pokemon" || input.activeAttacker === "melody" ? input.activeAttacker : DEFAULT_STATE.activeAttacker;
-  const arenaTheme = input.arenaTheme && input.arenaTheme in ARENA_THEMES ? input.arenaTheme : DEFAULT_STATE.arenaTheme;
-  const pokemonReceived = Array.isArray(input.pokemon?.received) ? input.pokemon.received : [];
-  const melodyReceived = Array.isArray(input.melody?.received) ? input.melody.received : [];
+  const input = parsed as Partial<DuelState> & {
+    pokemon?: Partial<SideState>;
+    melody?: Partial<SideState>;
+  };
+  const activeAttacker =
+    input.activeAttacker === "pokemon" || input.activeAttacker === "melody"
+      ? input.activeAttacker
+      : DEFAULT_STATE.activeAttacker;
+  const arenaTheme =
+    input.arenaTheme && input.arenaTheme in ARENA_THEMES
+      ? input.arenaTheme
+      : DEFAULT_STATE.arenaTheme;
+  const pokemonReceived = Array.isArray(input.pokemon?.received) ? input.pokemon!.received : [];
+  const melodyReceived = Array.isArray(input.melody?.received) ? input.melody!.received : [];
   const maxPersistedId = [...pokemonReceived, ...melodyReceived].reduce((max, card) => {
     if (!card || typeof card !== "object" || !("instanceId" in card)) return max;
     const raw = String(card.instanceId);
@@ -85,7 +107,10 @@ function normalizeState(parsed: unknown): DuelState {
   return {
     activeAttacker,
     arenaTheme,
-    nextPlayId: typeof input.nextPlayId === "number" && input.nextPlayId > 0 ? input.nextPlayId : maxPersistedId + 1,
+    nextPlayId:
+      typeof input.nextPlayId === "number" && input.nextPlayId > 0
+        ? input.nextPlayId
+        : maxPersistedId + 1,
     pokemon: {
       score: typeof input.pokemon?.score === "number" ? input.pokemon.score : 0,
       received: pokemonReceived,
@@ -93,10 +118,6 @@ function normalizeState(parsed: unknown): DuelState {
     melody: {
       score: typeof input.melody?.score === "number" ? input.melody.score : 0,
       received: melodyReceived,
-    },
-    expandedReceived: {
-      pokemon: Boolean(input.expandedReceived?.pokemon),
-      melody: Boolean(input.expandedReceived?.melody),
     },
   };
 }
@@ -119,6 +140,838 @@ function formatDate(iso: string): string {
   return date.toLocaleString("zh-TW", { hour12: false });
 }
 
+/** Recover the original DuelCard from a played-card record. */
+function lookupCard(played: PlayedCard): DuelCard | undefined {
+  const cardId = played.instanceId.replace(/-\d+$/, "");
+  return deckByFaction[played.from]?.find((c) => c.id === cardId);
+}
+
+/* ─────────────────────── CardTile ─────────────────────── */
+
+type CardSize = "small" | "medium" | "large";
+
+const CARD_DIMS: Record<
+  CardSize,
+  { w: number; h: number; imgH: number; titleSize: number; textSize: number }
+> = {
+  small:  { w: 80,  h: 112, imgH: 50,  titleSize: 6,  textSize: 5 },
+  medium: { w: 110, h: 154, imgH: 72,  titleSize: 8,  textSize: 6 },
+  large:  { w: 230, h: 322, imgH: 160, titleSize: 13, textSize: 10 },
+};
+
+function CardTile({
+  card,
+  size = "medium",
+  onClick,
+  isSelected,
+  style,
+}: {
+  card: DuelCard;
+  size?: CardSize;
+  onClick?: () => void;
+  isSelected?: boolean;
+  style?: React.CSSProperties;
+}) {
+  const [imgError, setImgError] = useState(false);
+  const isPokemon = card.faction === "pokemon";
+  const isPositive = card.score >= 0;
+  const d = CARD_DIMS[size];
+
+  const headerGradient = isPokemon
+    ? "linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)"
+    : "linear-gradient(135deg, #831843 0%, #ec4899 100%)";
+
+  const imgBg = isPokemon
+    ? "linear-gradient(180deg, #dbeafe 0%, #bfdbfe 60%, #93c5fd 100%)"
+    : "linear-gradient(180deg, #fce7f3 0%, #fbcfe8 60%, #f9a8d4 100%)";
+
+  const borderColor = isPokemon ? "#fbbf24" : "#f472b6";
+
+  return (
+    <div
+      onClick={onClick}
+      className={`card-tile${isSelected ? " card-selected" : ""}${onClick ? " card-clickable" : ""}`}
+      style={{
+        width: d.w,
+        height: d.h,
+        flexShrink: 0,
+        borderRadius: 10,
+        overflow: "hidden",
+        border: `2px solid ${borderColor}`,
+        boxShadow: isSelected
+          ? `0 0 0 3px #fbbf24, 0 8px 24px rgba(0,0,0,0.5)`
+          : `0 4px 16px rgba(0,0,0,0.4)`,
+        display: "flex",
+        flexDirection: "column",
+        cursor: onClick ? "pointer" : "default",
+        position: "relative",
+        ...style,
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          background: headerGradient,
+          padding: `${d.titleSize * 0.4}px ${d.titleSize * 0.6}px`,
+          flexShrink: 0,
+        }}
+      >
+        <div
+          style={{
+            fontSize: d.titleSize,
+            color: "white",
+            fontWeight: 800,
+            lineHeight: 1.2,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {card.title}
+        </div>
+        <div
+          style={{ fontSize: d.textSize - 1, color: "rgba(255,255,255,0.65)", lineHeight: 1 }}
+        >
+          {card.subtitle}
+        </div>
+      </div>
+
+      {/* Image area */}
+      <div
+        style={{
+          height: d.imgH,
+          background: imgBg,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          overflow: "hidden",
+          position: "relative",
+          flexShrink: 0,
+        }}
+      >
+        {card.image && !imgError ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={card.image}
+            alt={card.title}
+            onError={() => setImgError(true)}
+            style={{ width: "100%", height: "100%", objectFit: "contain" }}
+          />
+        ) : card.emoji ? (
+          <span style={{ fontSize: d.imgH * 0.45, lineHeight: 1 }}>{card.emoji}</span>
+        ) : (
+          <span style={{ fontSize: d.imgH * 0.3, opacity: 0.4 }}>🃏</span>
+        )}
+
+        {/* Score badge */}
+        <div
+          style={{
+            position: "absolute",
+            bottom: 4,
+            right: 4,
+            background: isPositive ? "rgba(16,185,129,0.92)" : "rgba(239,68,68,0.92)",
+            color: "white",
+            fontWeight: 900,
+            fontSize: d.titleSize + 1,
+            padding: `1px ${d.titleSize * 0.5}px`,
+            borderRadius: 4,
+            fontFamily: "monospace",
+            lineHeight: 1.5,
+          }}
+        >
+          {isPositive ? "+" : ""}
+          {card.score}
+        </div>
+
+        {/* Coming Soon overlay */}
+        {card.isComingSoon && (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              background: "rgba(0,0,0,0.55)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <span style={{ fontSize: d.textSize + 1, color: "#fbbf24", fontWeight: 700 }}>
+              Coming Soon
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Footer effect text */}
+      <div
+        style={{
+          background: "rgba(0,0,0,0.75)",
+          flex: 1,
+          padding: `${d.textSize * 0.4}px ${d.textSize * 0.6}px`,
+          overflow: "hidden",
+        }}
+      >
+        <div
+          style={{
+            fontSize: d.textSize,
+            color: "#d1d5db",
+            lineHeight: 1.3,
+            display: "-webkit-box",
+            WebkitBoxOrient: "vertical",
+            WebkitLineClamp: size === "large" ? 4 : 2,
+            overflow: "hidden",
+          }}
+        >
+          {card.command}
+        </div>
+      </div>
+
+      {/* Holographic shimmer */}
+      <div className="card-shine-layer" />
+    </div>
+  );
+}
+
+/* ─────────────────────── FanHand ─────────────────────── */
+
+function FanHand({
+  cards,
+  onPlayRequest,
+}: {
+  cards: DuelCard[];
+  onPlayRequest: () => void;
+}) {
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+  const handCards = cards.slice(0, 7);
+  const total = handCards.length;
+
+  return (
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        height: "200px",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "flex-end",
+      }}
+    >
+      {handCards.map((card, i) => {
+        const center = (total - 1) / 2;
+        const offset = i - center;
+        const rotation = offset * 9;
+        const baseY = Math.abs(offset) * 8;
+        const translateX = offset * 38;
+        const isHovered = hoveredIdx === i;
+
+        return (
+          <div
+            key={card.id}
+            onMouseEnter={() => setHoveredIdx(i)}
+            onMouseLeave={() => setHoveredIdx(null)}
+            onClick={onPlayRequest}
+            style={{
+              position: "absolute",
+              bottom: 0,
+              left: "50%",
+              transform: `translateX(calc(-50% + ${translateX}px)) translateY(${
+                isHovered ? -32 : baseY
+              }px) rotate(${isHovered ? 0 : rotation}deg)`,
+              transformOrigin: "bottom center",
+              zIndex: isHovered ? 50 : total - Math.abs(Math.round(offset)),
+              transition: "transform 0.18s ease",
+              cursor: "pointer",
+            }}
+          >
+            <CardTile card={card} size="medium" />
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─────────────────────── CardCarousel ─────────────────────── */
+
+function CardCarousel({
+  deck,
+  onPlay,
+  onClose,
+}: {
+  deck: DuelCard[];
+  onPlay: (card: DuelCard) => void;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(0);
+
+  const total = deck.length;
+  const cur = deck[index];
+  const prevIdx = (index - 1 + total) % total;
+  const nextIdx = (index + 1) % total;
+
+  const prev = () => setIndex(prevIdx);
+  const next = () => setIndex(nextIdx);
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") prev();
+      else if (e.key === "ArrowRight") next();
+      else if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center"
+      style={{ background: "rgba(0,0,0,0.82)", backdropFilter: "blur(6px)" }}
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}
+      >
+        <div style={{ textAlign: "center" }}>
+          <div style={{ color: "white", fontSize: 14, fontWeight: 700 }}>選擇出牌</div>
+          <div style={{ color: "#9ca3af", fontSize: 12 }}>
+            {index + 1} / {total} · 使用方向鍵或點擊切換
+          </div>
+        </div>
+
+        {/* Three-card stack */}
+        <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
+          <div
+            onClick={prev}
+            style={{
+              transform: "scale(0.72) translateX(40px)",
+              opacity: 0.45,
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              zIndex: 1,
+            }}
+          >
+            <CardTile card={deck[prevIdx]} size="large" />
+          </div>
+
+          <div style={{ zIndex: 2, transform: "scale(1)", transition: "all 0.25s ease" }}>
+            <CardTile card={cur} size="large" isSelected />
+          </div>
+
+          <div
+            onClick={next}
+            style={{
+              transform: "scale(0.72) translateX(-40px)",
+              opacity: 0.45,
+              cursor: "pointer",
+              transition: "all 0.2s ease",
+              zIndex: 1,
+            }}
+          >
+            <CardTile card={deck[nextIdx]} size="large" />
+          </div>
+        </div>
+
+        {/* Navigation row */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <button
+            onClick={prev}
+            style={{
+              background: "rgba(255,255,255,0.12)",
+              border: "none",
+              borderRadius: 8,
+              padding: "8px 12px",
+              color: "white",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            <ChevronLeft size={20} />
+          </button>
+
+          <button
+            onClick={() => onPlay(cur)}
+            disabled={cur.isComingSoon}
+            style={{
+              background: cur.isComingSoon ? "rgba(255,255,255,0.1)" : "#10b981",
+              border: "none",
+              borderRadius: 12,
+              padding: "10px 28px",
+              color: cur.isComingSoon ? "#6b7280" : "#022c22",
+              fontWeight: 800,
+              fontSize: 14,
+              cursor: cur.isComingSoon ? "not-allowed" : "pointer",
+            }}
+          >
+            {cur.isComingSoon ? "Coming Soon" : "⚡ 出此牌"}
+          </button>
+
+          <button
+            onClick={next}
+            style={{
+              background: "rgba(255,255,255,0.12)",
+              border: "none",
+              borderRadius: 8,
+              padding: "8px 12px",
+              color: "white",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+            }}
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+
+        <button
+          onClick={onClose}
+          style={{
+            background: "transparent",
+            border: "1px solid rgba(255,255,255,0.2)",
+            borderRadius: 8,
+            padding: "4px 14px",
+            color: "#9ca3af",
+            fontSize: 12,
+            cursor: "pointer",
+          }}
+        >
+          取消
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────── ZoneHeader ─────────────────────── */
+
+function ZoneHeader({
+  faction,
+  label,
+  isAttacker,
+  score,
+  factionName,
+}: {
+  faction: Faction;
+  label: string;
+  isAttacker: boolean;
+  score: number;
+  factionName: Record<Faction, string>;
+}) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        padding: "6px 16px",
+        borderBottom: "1px solid rgba(255,255,255,0.08)",
+        flexShrink: 0,
+      }}
+    >
+      <div>
+        <div
+          style={{
+            fontSize: 10,
+            color: "#9ca3af",
+            textTransform: "uppercase",
+            letterSpacing: "0.1em",
+          }}
+        >
+          {label}
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: "white" }}>
+          {factionName[faction]} CHR 陣營
+        </div>
+      </div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span
+          style={{
+            fontSize: 10,
+            padding: "2px 8px",
+            borderRadius: 12,
+            background: isAttacker ? "rgba(16,185,129,0.2)" : "rgba(99,102,241,0.2)",
+            color: isAttacker ? "#6ee7b7" : "#a5b4fc",
+          }}
+        >
+          {isAttacker ? "出牌方 ⚔️" : "接收方 🛡"}
+        </span>
+        <div
+          style={{
+            fontFamily: "monospace",
+            fontSize: 20,
+            fontWeight: 900,
+            color: score >= 0 ? "#6ee7b7" : "#fca5a5",
+          }}
+        >
+          {score >= 0 ? "+" : ""}
+          {score}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────── ReceivedRow ─────────────────────── */
+
+function ReceivedRow({ received }: { received: PlayedCard[] }) {
+  if (received.length === 0) {
+    return (
+      <div style={{ color: "#6b7280", fontSize: 12, padding: "8px 16px" }}>
+        尚未接收任何卡牌...
+      </div>
+    );
+  }
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        overflowX: "auto",
+        padding: "8px 16px 12px",
+        scrollbarWidth: "thin",
+      }}
+    >
+      {received.slice(0, 12).map((played) => {
+        const cardDef = lookupCard(played);
+        if (cardDef) {
+          return <CardTile key={played.instanceId} card={cardDef} size="small" />;
+        }
+        return (
+          <div
+            key={played.instanceId}
+            style={{
+              width: 80,
+              height: 112,
+              flexShrink: 0,
+              borderRadius: 8,
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.12)",
+              padding: "6px",
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "space-between",
+            }}
+          >
+            <div style={{ fontSize: 7, color: "white", fontWeight: 700 }}>{played.title}</div>
+            <div
+              style={{
+                fontFamily: "monospace",
+                fontSize: 11,
+                fontWeight: 900,
+                color: played.score >= 0 ? "#6ee7b7" : "#fca5a5",
+              }}
+            >
+              {played.score >= 0 ? "+" : ""}
+              {played.score}
+            </div>
+          </div>
+        );
+      })}
+      {received.length > 12 && (
+        <div style={{ color: "#9ca3af", fontSize: 11, flexShrink: 0 }}>
+          +{received.length - 12} 張
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────── ActionLog ─────────────────────── */
+
+function ActionLog({
+  attacker,
+  receiverReceived,
+}: {
+  attacker: Faction;
+  receiverReceived: PlayedCard[];
+}) {
+  const myPlays = receiverReceived.filter((p) => p.from === attacker).slice(0, 6);
+  return (
+    <div
+      style={{
+        width: 160,
+        flexShrink: 0,
+        borderRight: "1px solid rgba(255,255,255,0.08)",
+        overflowY: "auto",
+        padding: "8px",
+        scrollbarWidth: "thin",
+      }}
+    >
+      <div
+        style={{
+          fontSize: 10,
+          color: "#9ca3af",
+          textTransform: "uppercase",
+          letterSpacing: "0.08em",
+          marginBottom: 6,
+        }}
+      >
+        最近行動
+      </div>
+      {myPlays.length === 0 ? (
+        <div style={{ fontSize: 11, color: "#4b5563" }}>尚無出牌</div>
+      ) : (
+        myPlays.map((p) => (
+          <div
+            key={p.instanceId}
+            style={{
+              marginBottom: 6,
+              padding: "5px 6px",
+              borderRadius: 6,
+              background: "rgba(0,0,0,0.25)",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
+          >
+            <div
+              style={{
+                fontSize: 9,
+                color: "white",
+                fontWeight: 700,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              {p.title}
+            </div>
+            <div
+              style={{
+                fontSize: 9,
+                fontFamily: "monospace",
+                color: p.score >= 0 ? "#6ee7b7" : "#fca5a5",
+              }}
+            >
+              {p.score >= 0 ? "+" : ""}
+              {p.score} · {formatDate(p.playedAt).slice(5)}
+            </div>
+          </div>
+        ))
+      )}
+    </div>
+  );
+}
+
+/* ─────────────────────── SidebarContent ─────────────────────── */
+
+function SidebarContent({
+  elapsed,
+  battleStats,
+  duel,
+  attacker,
+  factionName,
+  onPlay,
+  onSwap,
+  onSettings,
+}: {
+  elapsed: number;
+  battleStats: { totalPlays: number; pokemonSent: number; melodySent: number };
+  duel: DuelState;
+  attacker: Faction;
+  factionName: Record<Faction, string>;
+  onPlay: () => void;
+  onSwap: () => void;
+  onSettings: () => void;
+}) {
+  return (
+    <div
+      style={{
+        height: "100%",
+        overflowY: "auto",
+        padding: "12px",
+        display: "flex",
+        flexDirection: "column",
+        gap: 12,
+      }}
+    >
+      <h1 style={{ fontSize: 13, fontWeight: 900, color: "white", margin: 0, lineHeight: 1.3 }}>
+        雙人 CHR
+        <br />
+        卡牌對戰場
+      </h1>
+
+      {/* Timer */}
+      <div
+        style={{
+          borderRadius: 10,
+          border: "1px solid rgba(251,191,36,0.3)",
+          background: "rgba(245,158,11,0.1)",
+          padding: "8px 10px",
+        }}
+      >
+        <div
+          style={{
+            fontSize: 10,
+            color: "#fde68a",
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          <Clock3 size={10} /> 時間計算器
+        </div>
+        <div
+          style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: "#fef3c7" }}
+        >
+          {timerText(elapsed)}
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div
+        style={{
+          borderRadius: 10,
+          border: "1px solid rgba(255,255,255,0.1)",
+          background: "rgba(0,0,0,0.25)",
+          padding: "8px 10px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+        }}
+      >
+        <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 2 }}>對戰統計</div>
+        {(
+          [
+            ["總出牌", battleStats.totalPlays, "#67e8f9"],
+            ["寶可夢", battleStats.pokemonSent, "#93c5fd"],
+            ["美樂蒂", battleStats.melodySent, "#f9a8d4"],
+          ] as const
+        ).map(([label, val, color]) => (
+          <div
+            key={label}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+          >
+            <span style={{ fontSize: 11, color: "#d1d5db" }}>{label}</span>
+            <span
+              style={{
+                fontFamily: "monospace",
+                fontSize: 14,
+                fontWeight: 700,
+                color,
+              }}
+            >
+              {val}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Scores */}
+      <div
+        style={{
+          borderRadius: 10,
+          border: "1px solid rgba(255,255,255,0.1)",
+          background: "rgba(0,0,0,0.25)",
+          padding: "8px 10px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 4,
+        }}
+      >
+        <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 2 }}>對戰分數</div>
+        {(["pokemon", "melody"] as Faction[]).map((f) => (
+          <div
+            key={f}
+            style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
+          >
+            <span style={{ fontSize: 11, color: "#d1d5db" }}>{factionName[f]}</span>
+            <span
+              style={{
+                fontFamily: "monospace",
+                fontSize: 16,
+                fontWeight: 900,
+                color: duel[f].score >= 0 ? "#6ee7b7" : "#fca5a5",
+              }}
+            >
+              {duel[f].score >= 0 ? "+" : ""}
+              {duel[f].score}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* Current attacker */}
+      <div
+        style={{
+          borderRadius: 10,
+          background: "rgba(16,185,129,0.12)",
+          border: "1px solid rgba(16,185,129,0.3)",
+          padding: "6px 10px",
+          fontSize: 11,
+          color: "#6ee7b7",
+        }}
+      >
+        ⚔️ 目前出牌方：{factionName[attacker]}
+      </div>
+
+      {/* Action buttons */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <button
+          onClick={onPlay}
+          style={{
+            background: "#10b981",
+            border: "none",
+            borderRadius: 10,
+            padding: "9px 0",
+            color: "#022c22",
+            fontWeight: 800,
+            fontSize: 13,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+          }}
+        >
+          <Swords size={14} /> 出牌
+        </button>
+
+        <button
+          onClick={onSwap}
+          style={{
+            background: "rgba(255,255,255,0.08)",
+            border: "1px solid rgba(255,255,255,0.15)",
+            borderRadius: 10,
+            padding: "8px 0",
+            color: "white",
+            fontWeight: 600,
+            fontSize: 12,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+          }}
+        >
+          <RefreshCw size={12} /> 換手
+        </button>
+
+        <button
+          onClick={onSettings}
+          style={{
+            background: "rgba(255,255,255,0.06)",
+            border: "1px solid rgba(255,255,255,0.1)",
+            borderRadius: 10,
+            padding: "8px 0",
+            color: "#d1d5db",
+            fontSize: 12,
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+          }}
+        >
+          <Settings2 size={12} /> 設定
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────────────── Main component ─────────────────────── */
+
 export default function Home() {
   const [duel, setDuel] = useState<DuelState>(() => {
     if (typeof window === "undefined") return DEFAULT_STATE;
@@ -132,6 +985,7 @@ export default function Home() {
   });
   const [showCardPicker, setShowCardPicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
@@ -139,7 +993,6 @@ export default function Home() {
       const sec = Math.max(0, Math.floor((Date.now() - START_DATE.getTime()) / 1000));
       setElapsed(sec);
     };
-
     updateElapsed();
     const id = window.setInterval(updateElapsed, 1000);
     return () => window.clearInterval(id);
@@ -157,9 +1010,9 @@ export default function Home() {
 
   const battleStats = useMemo(
     () => ({
+      totalPlays: duel.pokemon.received.length + duel.melody.received.length,
       pokemonSent: duel.melody.received.length,
       melodySent: duel.pokemon.received.length,
-      totalPlays: duel.pokemon.received.length + duel.melody.received.length,
     }),
     [duel]
   );
@@ -179,7 +1032,6 @@ export default function Home() {
         command: card.command,
         playedAt: new Date().toISOString(),
       };
-
       return {
         ...prev,
         nextPlayId: prev.nextPlayId + 1,
@@ -190,22 +1042,11 @@ export default function Home() {
         },
       };
     });
-
     setShowCardPicker(false);
   };
 
   const swapTurn = () => {
     setDuel((prev) => ({ ...prev, activeAttacker: getReceiver(prev.activeAttacker) }));
-  };
-
-  const toggleExpand = (faction: Faction) => {
-    setDuel((prev) => ({
-      ...prev,
-      expandedReceived: {
-        ...prev.expandedReceived,
-        [faction]: !prev.expandedReceived[faction],
-      },
-    }));
   };
 
   const resetDuel = () => {
@@ -214,228 +1055,310 @@ export default function Home() {
     setShowCardPicker(false);
   };
 
-  const sidePanel = (faction: Faction, title: string) => {
-    const side = duel[faction];
-    const isAttacker = duel.activeAttacker === faction;
-    const isExpanded = duel.expandedReceived[faction];
-    const cards = isExpanded ? side.received : side.received.slice(0, 4);
-    const sideBg = faction === "pokemon" ? activeTheme.topBg : activeTheme.bottomBg;
-
-    return (
-      <section
-        className="rounded-2xl border p-4 md:p-5"
+  return (
+    <div
+      style={{
+        display: "flex",
+        height: "100vh",
+        overflow: "hidden",
+        background: activeTheme.appBg,
+      }}
+    >
+      {/* ── Sidebar ── */}
+      <aside
         style={{
-          background: sideBg,
-          borderColor: activeTheme.cardBorder,
-          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04), 0 8px 24px rgba(0,0,0,0.25)",
+          width: showSidebar ? 220 : 44,
+          flexShrink: 0,
+          transition: "width 0.28s ease",
+          overflow: "hidden",
+          borderRight: "1px solid rgba(255,255,255,0.08)",
+          background: "rgba(0,0,0,0.3)",
+          display: "flex",
+          flexDirection: "column",
         }}
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-xs uppercase tracking-[0.22em] text-gray-400">{title}</div>
-            <h2 className="text-lg font-bold text-white mt-1">{factionName[faction]} CHR 陣營</h2>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${isAttacker ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-600/30 text-slate-300"}`}>
-              {isAttacker ? "當前出牌方" : "當前接收方"}
-            </span>
-            <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-white/10 text-gray-200">
-              牌組 {deckByFaction[faction].length} 張
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="rounded-xl border p-3 bg-black/20 border-white/10">
-            <div className="text-xs text-gray-400">對戰分數</div>
-            <div className={`mt-1 font-mono text-3xl font-black ${side.score >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-              {side.score >= 0 ? "+" : ""}
-              {side.score}
-            </div>
-          </div>
-          <div className="rounded-xl border p-3 bg-black/20 border-white/10">
-            <div className="text-xs text-gray-400">已接收牌數</div>
-            <div className="mt-1 font-mono text-2xl font-bold text-cyan-200">{side.received.length}</div>
-          </div>
-          <div className="rounded-xl border p-3 bg-black/20 border-white/10">
-            <div className="text-xs text-gray-400">最新指令效果</div>
-            <div className="mt-1 text-xs text-white line-clamp-2">{side.received[0]?.command ?? "尚未接收卡牌"}</div>
-          </div>
-          <div className="rounded-xl border p-3 bg-black/20 border-white/10">
-            <div className="text-xs text-gray-400">最後更新</div>
-            <div className="mt-1 text-xs text-gray-200">{side.received[0] ? formatDate(side.received[0].playedAt) : "-"}</div>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 p-3">
-          <div className="flex items-center justify-between">
-            <div className="text-sm font-semibold text-white">接收檯面</div>
-            {side.received.length > 4 && (
-              <button
-                onClick={() => toggleExpand(faction)}
-                className="inline-flex items-center gap-1 text-xs text-cyan-300 hover:text-cyan-200"
-              >
-                {isExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                {isExpanded ? "縮合" : "展開"}
-              </button>
-            )}
-          </div>
-          {side.received.length === 0 ? (
-            <p className="mt-3 text-xs text-gray-400">目前無卡牌。</p>
+        <button
+          onClick={() => setShowSidebar((s) => !s)}
+          title={showSidebar ? "收合側欄" : "展開側欄"}
+          style={{
+            flexShrink: 0,
+            height: 44,
+            width: "100%",
+            background: "transparent",
+            border: "none",
+            borderBottom: "1px solid rgba(255,255,255,0.08)",
+            color: "rgba(255,255,255,0.6)",
+            cursor: "pointer",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: showSidebar ? "flex-end" : "center",
+            padding: showSidebar ? "0 12px" : "0",
+            gap: 6,
+          }}
+        >
+          {showSidebar ? (
+            <>
+              <span style={{ fontSize: 11, color: "#9ca3af" }}>收合</span>
+              <PanelLeftClose size={16} />
+            </>
           ) : (
-            <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2 max-h-72 overflow-auto pr-1">
-              {cards.map((played) => (
-                <article key={played.instanceId} className="rounded-lg border border-white/10 bg-white/5 p-2.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="text-xs text-gray-400">{played.subtitle}</div>
-                      <div className="text-sm font-semibold text-white truncate">{played.title}</div>
-                    </div>
-                    <div className={`font-mono text-sm font-bold ${played.score >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                      {played.score >= 0 ? "+" : ""}
-                      {played.score}
-                    </div>
-                  </div>
-                  <div className="mt-2 text-xs text-gray-300">{played.command}</div>
-                </article>
-              ))}
-            </div>
+            <PanelLeftOpen size={16} />
           )}
-        </div>
-      </section>
-    );
-  };
+        </button>
 
-  return (
-    <main className="min-h-screen" style={{ background: activeTheme.appBg }}>
-      <div className="mx-auto max-w-6xl px-3 sm:px-4 py-4 sm:py-6">
-        <header className="rounded-2xl border border-white/10 bg-black/25 backdrop-blur-sm p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">雙人 CHR 卡牌對戰場</h1>
-              <p className="mt-1 text-xs sm:text-sm text-gray-300">上下分區攻防、分數即時累積、操作可續玩、支援行動裝置。</p>
-            </div>
-            <div className="flex items-center gap-2 sm:gap-3">
-              <div className="rounded-xl border border-orange-400/30 bg-orange-500/10 px-3 py-2 text-right">
-                <div className="flex items-center justify-end gap-1 text-[11px] text-orange-200"><Clock3 size={12} /> 時間計算器</div>
-                <div className="font-mono text-sm sm:text-base font-bold text-orange-100">{timerText(elapsed)}</div>
+        <div
+          style={{
+            flex: 1,
+            overflow: "hidden",
+            opacity: showSidebar ? 1 : 0,
+            transition: "opacity 0.15s ease",
+            pointerEvents: showSidebar ? "auto" : "none",
+          }}
+        >
+          <SidebarContent
+            elapsed={elapsed}
+            battleStats={battleStats}
+            duel={duel}
+            attacker={attacker}
+            factionName={factionName}
+            onPlay={() => setShowCardPicker(true)}
+            onSwap={swapTurn}
+            onSettings={() => setShowSettings(true)}
+          />
+        </div>
+      </aside>
+
+      {/* ── Main battle area ── */}
+      <main
+        style={{
+          flex: 1,
+          display: "flex",
+          flexDirection: "column",
+          overflow: "hidden",
+          minWidth: 0,
+        }}
+      >
+        {/* Opponent zone (top) */}
+        <div
+          style={{
+            flex: 1,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            background: activeTheme.topBg,
+            minHeight: 0,
+          }}
+        >
+          <ZoneHeader
+            faction={receiver}
+            label="上方玩家 · 對手接收區"
+            isAttacker={false}
+            score={duel[receiver].score}
+            factionName={factionName}
+          />
+          <div style={{ flex: 1, overflow: "hidden" }}>
+            <ReceivedRow received={duel[receiver].received} />
+          </div>
+        </div>
+
+        {/* Divider */}
+        <div
+          style={{
+            height: 2,
+            flexShrink: 0,
+            background: `linear-gradient(90deg, transparent, ${activeTheme.divider}, transparent)`,
+          }}
+        />
+
+        {/* Player zone (bottom) */}
+        <div
+          style={{
+            flex: 1.4,
+            display: "flex",
+            flexDirection: "column",
+            overflow: "hidden",
+            background: activeTheme.bottomBg,
+            minHeight: 0,
+          }}
+        >
+          <ZoneHeader
+            faction={attacker}
+            label="下方玩家 · 我的出牌區"
+            isAttacker={true}
+            score={duel[attacker].score}
+            factionName={factionName}
+          />
+
+          <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+            <ActionLog
+              attacker={attacker}
+              receiverReceived={duel[receiver].received}
+            />
+
+            {/* Fan hand area */}
+            <div
+              style={{
+                flex: 1,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "flex-end",
+                padding: "8px 8px 12px",
+                overflow: "hidden",
+                position: "relative",
+              }}
+            >
+              <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 4, textAlign: "center" }}>
+                手牌預覽 · 點擊任意牌或下方按鈕出牌
               </div>
+              <FanHand
+                cards={attackerDeck.filter((c) => !c.isComingSoon)}
+                onPlayRequest={() => setShowCardPicker(true)}
+              />
               <button
-                onClick={() => setShowSettings(true)}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10"
+                onClick={() => setShowCardPicker(true)}
+                style={{
+                  marginTop: 10,
+                  background: "#10b981",
+                  border: "none",
+                  borderRadius: 10,
+                  padding: "8px 24px",
+                  color: "#022c22",
+                  fontWeight: 800,
+                  fontSize: 13,
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                }}
               >
-                <Settings2 size={14} /> Settings
+                <Swords size={14} /> 出牌（{factionName[attacker]}）
               </button>
             </div>
           </div>
-
-          <div className="mt-4 grid grid-cols-3 gap-2 sm:gap-3">
-            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <div className="text-[11px] text-gray-400">總出牌次數</div>
-              <div className="font-mono text-lg font-bold text-cyan-200">{battleStats.totalPlays}</div>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <div className="text-[11px] text-gray-400">寶可夢出牌</div>
-              <div className="font-mono text-lg font-bold text-blue-200">{battleStats.pokemonSent}</div>
-            </div>
-            <div className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
-              <div className="text-[11px] text-gray-400">美樂蒂出牌</div>
-              <div className="font-mono text-lg font-bold text-pink-200">{battleStats.melodySent}</div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <button
-              onClick={() => setShowCardPicker(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
-            >
-              <Swords size={15} /> 出牌 Action（{factionName[attacker]}）
-            </button>
-            <button
-              onClick={swapTurn}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-semibold text-white hover:bg-white/15"
-            >
-              <RefreshCw size={14} /> 上下方轉至
-            </button>
-            <span className="text-xs text-gray-300">目前由「{factionName[attacker]}」對「{factionName[receiver]}」出牌</span>
-          </div>
-        </header>
-
-        <div className="mt-4 space-y-4">
-          {sidePanel("pokemon", "上方玩家")}
-          {sidePanel("melody", "下方玩家")}
         </div>
+      </main>
 
-        <footer className="mt-5 text-center text-xs text-gray-400">對戰風格參考卡牌對戰介面｜含 CHR 風格牌組、分數計算、持久化存檔</footer>
-      </div>
-
+      {/* Card carousel overlay */}
       {showCardPicker && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm p-3 sm:p-6" role="dialog" aria-modal="true">
-          <div className="mx-auto max-w-4xl rounded-2xl border border-white/15 bg-slate-950 p-4">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-white">選擇要出給對手的卡牌</div>
-                <div className="text-xs text-gray-400">目前可選 {attackerDeck.length - 1} 張主卡 + Coming Soon 預告卡</div>
-              </div>
-              <button onClick={() => setShowCardPicker(false)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-200 hover:bg-white/10">關閉</button>
-            </div>
-
-            <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[70vh] overflow-auto pr-1">
-              {attackerDeck.map((card) => (
-                <article
-                  key={card.id}
-                  className={`rounded-xl border p-3 ${card.isComingSoon ? "border-amber-400/30 bg-amber-500/10" : "border-white/10 bg-white/5"}`}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="text-[11px] text-gray-400">{card.subtitle}</div>
-                      <h3 className="text-sm font-bold text-white mt-0.5">{card.title}</h3>
-                      <div className="mt-1 text-[11px] text-cyan-200">{card.styleLabel}</div>
-                    </div>
-                    <div className={`font-mono text-sm font-black ${card.score >= 0 ? "text-emerald-300" : "text-rose-300"}`}>
-                      {card.score >= 0 ? "+" : ""}{card.score}
-                    </div>
-                  </div>
-                  <p className="mt-2 text-xs text-gray-300 min-h-10">{card.command}</p>
-                  <button
-                    onClick={() => playCard(card)}
-                    disabled={card.isComingSoon}
-                    className={`mt-3 w-full rounded-lg px-3 py-2 text-xs font-semibold ${card.isComingSoon ? "cursor-not-allowed bg-white/10 text-gray-400" : "bg-cyan-500 text-cyan-950 hover:bg-cyan-400"}`}
-                  >
-                    {card.isComingSoon ? "Coming Soon" : "選擇此卡出牌"}
-                  </button>
-                </article>
-              ))}
-            </div>
-          </div>
-        </div>
+        <CardCarousel
+          deck={attackerDeck}
+          onPlay={playCard}
+          onClose={() => setShowCardPicker(false)}
+        />
       )}
 
+      {/* Settings modal */}
       {showSettings && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm p-3 sm:p-6" role="dialog" aria-modal="true">
-          <div className="mx-auto max-w-lg rounded-2xl border border-white/15 bg-slate-950 p-4">
-            <h3 className="text-sm font-bold text-white">對戰場景設定</h3>
-            <p className="mt-1 text-xs text-gray-400">可切換底部場景與配色，兩方共用。</p>
-            <div className="mt-4 space-y-2">
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
+          onClick={() => setShowSettings(false)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              background: "#0f172a",
+              border: "1px solid rgba(255,255,255,0.12)",
+              borderRadius: 16,
+              padding: 20,
+              width: 320,
+              maxWidth: "90vw",
+            }}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: 12,
+              }}
+            >
+              <h3
+                style={{ color: "white", fontSize: 14, fontWeight: 700, margin: 0 }}
+              >
+                對戰場景設定
+              </h3>
+              <button
+                onClick={() => setShowSettings(false)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#9ca3af",
+                  cursor: "pointer",
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <p style={{ color: "#9ca3af", fontSize: 12, marginBottom: 12 }}>
+              切換底部場景配色，兩方共用。
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {(Object.keys(ARENA_THEMES) as ArenaTheme[]).map((themeKey) => (
                 <button
                   key={themeKey}
                   onClick={() => setDuel((prev) => ({ ...prev, arenaTheme: themeKey }))}
-                  className={`w-full rounded-lg border px-3 py-2 text-left text-sm ${duel.arenaTheme === themeKey ? "border-cyan-400/60 bg-cyan-500/10 text-cyan-200" : "border-white/10 bg-white/5 text-gray-200"}`}
+                  style={{
+                    background:
+                      duel.arenaTheme === themeKey
+                        ? "rgba(6,182,212,0.12)"
+                        : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${
+                      duel.arenaTheme === themeKey
+                        ? "rgba(6,182,212,0.5)"
+                        : "rgba(255,255,255,0.08)"
+                    }`,
+                    borderRadius: 8,
+                    padding: "8px 12px",
+                    color: duel.arenaTheme === themeKey ? "#67e8f9" : "#d1d5db",
+                    fontSize: 13,
+                    cursor: "pointer",
+                    textAlign: "left",
+                  }}
                 >
                   {ARENA_THEMES[themeKey].name}
                 </button>
               ))}
             </div>
 
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button onClick={resetDuel} className="rounded-lg border border-rose-400/40 px-3 py-1.5 text-xs text-rose-200 hover:bg-rose-500/10">重置對戰紀錄</button>
-              <button onClick={() => setShowSettings(false)} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs text-gray-100 hover:bg-white/10">完成</button>
+            <div
+              style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}
+            >
+              <button
+                onClick={resetDuel}
+                style={{
+                  background: "rgba(239,68,68,0.1)",
+                  border: "1px solid rgba(239,68,68,0.3)",
+                  borderRadius: 8,
+                  padding: "6px 14px",
+                  color: "#fca5a5",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                重置對戰
+              </button>
+              <button
+                onClick={() => setShowSettings(false)}
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.12)",
+                  borderRadius: 8,
+                  padding: "6px 14px",
+                  color: "#e5e7eb",
+                  fontSize: 12,
+                  cursor: "pointer",
+                }}
+              >
+                完成
+              </button>
             </div>
           </div>
         </div>
       )}
-
-    </main>
+    </div>
   );
 }
