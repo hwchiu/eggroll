@@ -31,6 +31,7 @@ type DuelState = {
   melody: SideState;
   expandedReceived: Record<Faction, boolean>;
   arenaTheme: ArenaTheme;
+  nextPlayId: number;
 };
 
 const DEFAULT_STATE: DuelState = {
@@ -39,6 +40,7 @@ const DEFAULT_STATE: DuelState = {
   melody: { score: 0, received: [] },
   expandedReceived: { pokemon: false, melody: false },
   arenaTheme: "stadium-night",
+  nextPlayId: 1,
 };
 
 const ARENA_THEMES: Record<ArenaTheme, { name: string; appBg: string; topBg: string; bottomBg: string; cardBorder: string }> = {
@@ -82,24 +84,20 @@ function formatDate(iso: string): string {
 }
 
 export default function Home() {
-  const [duel, setDuel] = useState<DuelState>(DEFAULT_STATE);
-  const [mounted, setMounted] = useState(false);
+  const [duel, setDuel] = useState<DuelState>(() => {
+    if (typeof window === "undefined") return DEFAULT_STATE;
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return DEFAULT_STATE;
+    try {
+      const parsed = JSON.parse(raw) as DuelState;
+      return { ...DEFAULT_STATE, ...parsed };
+    } catch {
+      return DEFAULT_STATE;
+    }
+  });
   const [showCardPicker, setShowCardPicker] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [elapsed, setElapsed] = useState(0);
-
-  useEffect(() => {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      try {
-        const parsed = JSON.parse(raw) as DuelState;
-        setDuel({ ...DEFAULT_STATE, ...parsed });
-      } catch {
-        setDuel(DEFAULT_STATE);
-      }
-    }
-    setMounted(true);
-  }, []);
 
   useEffect(() => {
     const updateElapsed = () => {
@@ -113,9 +111,8 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!mounted) return;
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(duel));
-  }, [duel, mounted]);
+  }, [duel]);
 
   const attacker = duel.activeAttacker;
   const receiver = getReceiver(attacker);
@@ -133,26 +130,31 @@ export default function Home() {
 
   const playCard = (card: DuelCard) => {
     if (card.isComingSoon) return;
-
-    const to = getReceiver(duel.activeAttacker);
-    const played: PlayedCard = {
-      instanceId: `${card.id}-${Date.now()}`,
-      from: duel.activeAttacker,
-      to,
-      title: card.title,
-      subtitle: card.subtitle,
-      score: card.score,
-      command: card.command,
-      playedAt: new Date().toISOString(),
-    };
-
     setDuel((prev) => ({
-      ...prev,
-      [to]: {
-        ...prev[to],
-        score: prev[to].score + card.score,
-        received: [played, ...prev[to].received],
-      },
+      ...(() => {
+        const from = prev.activeAttacker;
+        const to = getReceiver(from);
+        const played: PlayedCard = {
+          instanceId: `${card.id}-${prev.nextPlayId}`,
+          from,
+          to,
+          title: card.title,
+          subtitle: card.subtitle,
+          score: card.score,
+          command: card.command,
+          playedAt: new Date(START_DATE.getTime() + elapsed * 1000).toISOString(),
+        };
+
+        return {
+          ...prev,
+          nextPlayId: prev.nextPlayId + 1,
+          [to]: {
+            ...prev[to],
+            score: prev[to].score + card.score,
+            received: [played, ...prev[to].received],
+          },
+        };
+      })(),
     }));
 
     setShowCardPicker(false);
@@ -400,7 +402,6 @@ export default function Home() {
         </div>
       )}
 
-      {!mounted && <div className="fixed bottom-2 right-2 text-[10px] text-gray-500">loading saved state…</div>}
     </main>
   );
 }
