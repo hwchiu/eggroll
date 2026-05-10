@@ -10,7 +10,7 @@ export interface DuelCard {
   command: string;
   /** URL for the card illustration (Pokemon official artwork) */
   image?: string;
-  /** Emoji art used for Melody cards instead of a photo */
+  /** Emoji art used as fallback on specific cards */
   emoji?: string;
   isComingSoon?: boolean;
 }
@@ -137,14 +137,20 @@ const POKEMON_POKEDEX_IDS: number[] = [
   249, // Lugia
 ];
 
-// Emojis used as card art for Melody faction
-const MELODY_EMOJIS: string[] = [
-  "🍓", "😴", "🎀", "☁️", "🌸",
-  "⭐", "🤗", "🥧", "🌈", "🍑",
-  "🌷", "🧁", "✨", "🌹", "🍰",
-  "🌙", "🫐", "🐰", "🎉", "💜",
-  "💌", "👑", "🥤", "🙏", "🧸",
-  "🎡", "🌅", "🎗️", "💎", "🍦",
+// My Melody images collected from official Sanrio shop product pages
+const MELODY_IMAGE_URLS: string[] = [
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/files/my-melody-mini-squishy-plush-660912-1_600x.jpg",
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/my-melody-face-mini-pouch-sanrio-701882_600x.jpg",
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/my-melody-floral-mini-bag-sanrio-710926_600x.jpg",
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/sanrio-mascot-plush-keychain-my-melody-1_600x.jpg",
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/my-melody-hair-brush-sanrio-190721_600x.jpg",
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/sanrio-stacking-figure-my-melody-1_600x.jpg",
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/my-melody-gingham-style-pen-sanrio-330807_600x.jpg",
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/my-melody-sweet-heart-mini-tote-sanrio-200358_600x.jpg",
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/my-melody-mug-pink-bow-sanrio-504759_600x.jpg",
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/my-melody-charm-pen-sanrio-321972_600x.jpg",
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/my-melody-kuromi-collectible-series-02-blind-box-sanrio-880817_600x.jpg",
+  "https://cdn.shopify.com/s/files/1/0266/6276/4597/products/my-melody-sakura-acrylic-keychain-sanrio-473839_600x.jpg",
 ];
 
 // Base URL for Pokémon official artwork (via PokeAPI sprite repository)
@@ -160,11 +166,8 @@ function buildCards(faction: Faction, titles: string[], subtitlePrefix: string):
     const image =
       faction === "pokemon" && index < POKEMON_POKEDEX_IDS.length
         ? `${POKEAPI_ARTWORK_BASE}/${POKEMON_POKEDEX_IDS[index]}.png`
-        : undefined;
-
-    const emoji =
-      faction === "melody" && index < MELODY_EMOJIS.length
-        ? MELODY_EMOJIS[index]
+        : faction === "melody" && MELODY_IMAGE_URLS.length > 0
+          ? MELODY_IMAGE_URLS[index % MELODY_IMAGE_URLS.length]
         : undefined;
 
     return {
@@ -176,7 +179,6 @@ function buildCards(faction: Faction, titles: string[], subtitlePrefix: string):
       score,
       command: `${score >= 0 ? "+" : ""}${score} 分：${message}`,
       image,
-      emoji,
     };
   });
 }
@@ -206,7 +208,7 @@ export const melodyCards: DuelCard[] = [
     styleLabel: "Preview",
     score: 0,
     command: "0 分：節慶活動卡正在準備中！",
-    emoji: "🎁",
+    image: MELODY_IMAGE_URLS[0],
     isComingSoon: true,
   },
 ];
