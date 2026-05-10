@@ -67,6 +67,40 @@ const ARENA_THEMES: Record<ArenaTheme, { name: string; appBg: string; topBg: str
   },
 };
 
+function normalizeState(parsed: unknown): DuelState {
+  if (!parsed || typeof parsed !== "object") return DEFAULT_STATE;
+  const input = parsed as Partial<DuelState> & { pokemon?: Partial<SideState>; melody?: Partial<SideState> };
+  const activeAttacker = input.activeAttacker === "pokemon" || input.activeAttacker === "melody" ? input.activeAttacker : DEFAULT_STATE.activeAttacker;
+  const arenaTheme = input.arenaTheme && input.arenaTheme in ARENA_THEMES ? input.arenaTheme : DEFAULT_STATE.arenaTheme;
+  const pokemonReceived = Array.isArray(input.pokemon?.received) ? input.pokemon.received : [];
+  const melodyReceived = Array.isArray(input.melody?.received) ? input.melody.received : [];
+  const maxPersistedId = [...pokemonReceived, ...melodyReceived].reduce((max, card) => {
+    if (!card || typeof card !== "object" || !("instanceId" in card)) return max;
+    const raw = String(card.instanceId);
+    const match = raw.match(/-(\d+)$/);
+    const parsedNum = match ? Number(match[1]) : NaN;
+    return Number.isFinite(parsedNum) ? Math.max(max, parsedNum) : max;
+  }, 0);
+
+  return {
+    activeAttacker,
+    arenaTheme,
+    nextPlayId: typeof input.nextPlayId === "number" && input.nextPlayId > 0 ? input.nextPlayId : maxPersistedId + 1,
+    pokemon: {
+      score: typeof input.pokemon?.score === "number" ? input.pokemon.score : 0,
+      received: pokemonReceived,
+    },
+    melody: {
+      score: typeof input.melody?.score === "number" ? input.melody.score : 0,
+      received: melodyReceived,
+    },
+    expandedReceived: {
+      pokemon: Boolean(input.expandedReceived?.pokemon),
+      melody: Boolean(input.expandedReceived?.melody),
+    },
+  };
+}
+
 function getReceiver(attacker: Faction): Faction {
   return attacker === "pokemon" ? "melody" : "pokemon";
 }
@@ -80,7 +114,9 @@ function timerText(elapsed: number): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString("zh-TW", { hour12: false });
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("zh-TW", { hour12: false });
 }
 
 export default function Home() {
@@ -89,8 +125,7 @@ export default function Home() {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return DEFAULT_STATE;
     try {
-      const parsed = JSON.parse(raw) as DuelState;
-      return { ...DEFAULT_STATE, ...parsed };
+      return normalizeState(JSON.parse(raw));
     } catch {
       return DEFAULT_STATE;
     }
@@ -114,6 +149,7 @@ export default function Home() {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(duel));
   }, [duel]);
 
+  const factionName: Record<Faction, string> = { pokemon: "寶可夢", melody: "美樂蒂" };
   const attacker = duel.activeAttacker;
   const receiver = getReceiver(attacker);
   const attackerDeck = deckByFaction[attacker];
@@ -130,32 +166,30 @@ export default function Home() {
 
   const playCard = (card: DuelCard) => {
     if (card.isComingSoon) return;
-    setDuel((prev) => ({
-      ...(() => {
-        const from = prev.activeAttacker;
-        const to = getReceiver(from);
-        const played: PlayedCard = {
-          instanceId: `${card.id}-${prev.nextPlayId}`,
-          from,
-          to,
-          title: card.title,
-          subtitle: card.subtitle,
-          score: card.score,
-          command: card.command,
-          playedAt: new Date(START_DATE.getTime() + elapsed * 1000).toISOString(),
-        };
+    setDuel((prev) => {
+      const from = prev.activeAttacker;
+      const to = getReceiver(from);
+      const played: PlayedCard = {
+        instanceId: `${card.id}-${prev.nextPlayId}`,
+        from,
+        to,
+        title: card.title,
+        subtitle: card.subtitle,
+        score: card.score,
+        command: card.command,
+        playedAt: new Date().toISOString(),
+      };
 
-        return {
-          ...prev,
-          nextPlayId: prev.nextPlayId + 1,
-          [to]: {
-            ...prev[to],
-            score: prev[to].score + card.score,
-            received: [played, ...prev[to].received],
-          },
-        };
-      })(),
-    }));
+      return {
+        ...prev,
+        nextPlayId: prev.nextPlayId + 1,
+        [to]: {
+          ...prev[to],
+          score: prev[to].score + card.score,
+          received: [played, ...prev[to].received],
+        },
+      };
+    });
 
     setShowCardPicker(false);
   };
@@ -199,7 +233,7 @@ export default function Home() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <div className="text-xs uppercase tracking-[0.22em] text-gray-400">{title}</div>
-            <h2 className="text-lg font-bold text-white mt-1">{faction === "pokemon" ? "寶可夢 CHR 陣營" : "美樂蒂 CHR 陣營"}</h2>
+            <h2 className="text-lg font-bold text-white mt-1">{factionName[faction]} CHR 陣營</h2>
           </div>
           <div className="flex items-center gap-2">
             <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${isAttacker ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-600/30 text-slate-300"}`}>
@@ -315,7 +349,7 @@ export default function Home() {
               onClick={() => setShowCardPicker(true)}
               className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 text-sm font-bold text-emerald-950 hover:bg-emerald-400"
             >
-              <Swords size={15} /> 出牌 Action（{attacker === "pokemon" ? "寶可夢" : "美樂蒂"}）
+              <Swords size={15} /> 出牌 Action（{factionName[attacker]}）
             </button>
             <button
               onClick={swapTurn}
@@ -323,7 +357,7 @@ export default function Home() {
             >
               <RefreshCw size={14} /> 上下方轉至
             </button>
-            <span className="text-xs text-gray-300">目前由「{attacker === "pokemon" ? "寶可夢" : "美樂蒂"}」對「{receiver === "pokemon" ? "寶可夢" : "美樂蒂"}」出牌</span>
+            <span className="text-xs text-gray-300">目前由「{factionName[attacker]}」對「{factionName[receiver]}」出牌</span>
           </div>
         </header>
 
