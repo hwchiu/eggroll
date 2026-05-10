@@ -147,6 +147,10 @@ const MELODY_EMOJIS: string[] = [
   "🎡", "🌅", "🎗️", "💎", "🍦",
 ];
 
+// Base URL for Pokémon official artwork (via PokeAPI sprite repository)
+const POKEAPI_ARTWORK_BASE =
+  "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork";
+
 function buildCards(faction: Faction, titles: string[], subtitlePrefix: string): DuelCard[] {
   return titles.map((title, index) => {
     const score = index % 3 === 0 ? -(2 + (index % 7)) : 2 + (index % 9);
@@ -155,7 +159,7 @@ function buildCards(faction: Faction, titles: string[], subtitlePrefix: string):
 
     const image =
       faction === "pokemon" && index < POKEMON_POKEDEX_IDS.length
-        ? `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${POKEMON_POKEDEX_IDS[index]}.png`
+        ? `${POKEAPI_ARTWORK_BASE}/${POKEMON_POKEDEX_IDS[index]}.png`
         : undefined;
 
     const emoji =

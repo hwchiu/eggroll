@@ -94,8 +94,10 @@ function normalizeState(parsed: unknown): DuelState {
     input.arenaTheme && input.arenaTheme in ARENA_THEMES
       ? input.arenaTheme
       : DEFAULT_STATE.arenaTheme;
-  const pokemonReceived = Array.isArray(input.pokemon?.received) ? input.pokemon!.received : [];
-  const melodyReceived = Array.isArray(input.melody?.received) ? input.melody!.received : [];
+  const pokemonRaw = input.pokemon?.received;
+  const melodyRaw = input.melody?.received;
+  const pokemonReceived: PlayedCard[] = Array.isArray(pokemonRaw) ? pokemonRaw : [];
+  const melodyReceived: PlayedCard[] = Array.isArray(melodyRaw) ? melodyRaw : [];
   const maxPersistedId = [...pokemonReceived, ...melodyReceived].reduce((max, card) => {
     if (!card || typeof card !== "object" || !("instanceId" in card)) return max;
     const raw = String(card.instanceId);
@@ -409,18 +411,18 @@ function CardCarousel({
   const prevIdx = (index - 1 + total) % total;
   const nextIdx = (index + 1) % total;
 
-  const prev = () => setIndex(prevIdx);
-  const next = () => setIndex(nextIdx);
+  const prev = () => setIndex((i) => (i - 1 + deck.length) % deck.length);
+  const next = () => setIndex((i) => (i + 1) % deck.length);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") prev();
-      else if (e.key === "ArrowRight") next();
+      if (e.key === "ArrowLeft") setIndex((i) => (i - 1 + deck.length) % deck.length);
+      else if (e.key === "ArrowRight") setIndex((i) => (i + 1) % deck.length);
       else if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  });
+  }, [deck.length, onClose]);
 
   return (
     <div
