@@ -1,1366 +1,500 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { deckByFaction, type DuelCard, type Faction } from "@/data/cards";
+import { useMemo, useState } from "react";
+import { AlertTriangle, BarChart3, CalendarClock, CheckCircle2, Filter, Search } from "lucide-react";
 import {
-  Clock3,
-  Settings2,
-  Swords,
-  RefreshCw,
-  ChevronLeft,
-  ChevronRight,
-  X,
-  PanelLeftClose,
-  PanelLeftOpen,
-} from "lucide-react";
+  monitoringRecords,
+  type CompanyMonitoringRecord,
+  type OverallReadiness,
+  type ReportStatus,
+} from "@/data/monitoring";
 
-const START_DATE = new Date("2026-04-01T03:00:00");
-const STORAGE_KEY = "eggroll-duel-arena-v1";
-
-type SideState = {
-  score: number;
-  received: PlayedCard[];
+const READINESS_LABEL: Record<OverallReadiness, string> = {
+  fully_ready: "Fully Ready",
+  partial_ready: "Partial Ready",
+  not_ready: "Not Ready",
 };
 
-type PlayedCard = {
-  instanceId: string;
-  from: Faction;
-  to: Faction;
-  title: string;
-  subtitle: string;
-  score: number;
-  command: string;
-  playedAt: string;
+const REPORT_LABEL: Record<ReportStatus, string> = {
+  fully_reported: "Fully Reported",
+  partial_ready: "Partial",
+  not_published: "Not Published",
 };
 
-type ArenaTheme = "stadium-night" | "forest-festival" | "pink-fair";
-
-type DuelState = {
-  activeAttacker: Faction;
-  pokemon: SideState;
-  melody: SideState;
-  arenaTheme: ArenaTheme;
-  nextPlayId: number;
+const READINESS_COLOR: Record<OverallReadiness, string> = {
+  fully_ready: "#10b981",
+  partial_ready: "#f59e0b",
+  not_ready: "#ef4444",
 };
 
-const DEFAULT_STATE: DuelState = {
-  activeAttacker: "pokemon",
-  pokemon: { score: 0, received: [] },
-  melody: { score: 0, received: [] },
-  arenaTheme: "stadium-night",
-  nextPlayId: 1,
-};
-
-const ARENA_THEMES: Record<
-  ArenaTheme,
-  { name: string; appBg: string; topBg: string; bottomBg: string; divider: string }
-> = {
-  "stadium-night": {
-    name: "Stadium Night",
-    appBg: "linear-gradient(180deg, #0a1020 0%, #071015 100%)",
-    topBg: "radial-gradient(circle at 20% 20%, rgba(59,130,246,0.25), transparent 55%), #0f1f3a",
-    bottomBg: "radial-gradient(circle at 80% 30%, rgba(244,114,182,0.22), transparent 58%), #2d1539",
-    divider: "#1e3a5f",
-  },
-  "forest-festival": {
-    name: "Forest Festival",
-    appBg: "linear-gradient(180deg, #0b1a16 0%, #11221e 100%)",
-    topBg: "radial-gradient(circle at 10% 10%, rgba(34,197,94,0.20), transparent 60%), #12352c",
-    bottomBg: "radial-gradient(circle at 90% 20%, rgba(163,230,53,0.18), transparent 60%), #2a3a19",
-    divider: "#2f4f46",
-  },
-  "pink-fair": {
-    name: "Pink Fair",
-    appBg: "linear-gradient(180deg, #180b18 0%, #220f2f 100%)",
-    topBg: "radial-gradient(circle at 20% 20%, rgba(167,139,250,0.25), transparent 58%), #271944",
-    bottomBg: "radial-gradient(circle at 85% 15%, rgba(244,114,182,0.24), transparent 58%), #4b1642",
-    divider: "#503159",
-  },
-};
-
-/* ─────────────────────── helpers ─────────────────────── */
-
-function normalizeState(parsed: unknown): DuelState {
-  if (!parsed || typeof parsed !== "object") return DEFAULT_STATE;
-  const input = parsed as Partial<DuelState> & {
-    pokemon?: Partial<SideState>;
-    melody?: Partial<SideState>;
-  };
-  const activeAttacker =
-    input.activeAttacker === "pokemon" || input.activeAttacker === "melody"
-      ? input.activeAttacker
-      : DEFAULT_STATE.activeAttacker;
-  const arenaTheme =
-    input.arenaTheme && input.arenaTheme in ARENA_THEMES
-      ? input.arenaTheme
-      : DEFAULT_STATE.arenaTheme;
-  const pokemonRaw = input.pokemon?.received;
-  const melodyRaw = input.melody?.received;
-  const pokemonReceived: PlayedCard[] = Array.isArray(pokemonRaw) ? pokemonRaw : [];
-  const melodyReceived: PlayedCard[] = Array.isArray(melodyRaw) ? melodyRaw : [];
-  const maxPersistedId = [...pokemonReceived, ...melodyReceived].reduce((max, card) => {
-    if (!card || typeof card !== "object" || !("instanceId" in card)) return max;
-    const raw = String(card.instanceId);
-    const match = raw.match(/-(\d+)$/);
-    const parsedNum = match ? Number(match[1]) : NaN;
-    return Number.isFinite(parsedNum) ? Math.max(max, parsedNum) : max;
-  }, 0);
-
-  return {
-    activeAttacker,
-    arenaTheme,
-    nextPlayId:
-      typeof input.nextPlayId === "number" && input.nextPlayId > 0
-        ? input.nextPlayId
-        : maxPersistedId + 1,
-    pokemon: {
-      score: typeof input.pokemon?.score === "number" ? input.pokemon.score : 0,
-      received: pokemonReceived,
-    },
-    melody: {
-      score: typeof input.melody?.score === "number" ? input.melody.score : 0,
-      received: melodyReceived,
-    },
-  };
+function formatDateTime(input: string | null): string {
+  if (!input) return "Not announced";
+  const dt = new Date(input);
+  if (Number.isNaN(dt.getTime())) return "Unknown";
+  return dt.toLocaleString("en-US", { hour12: false });
 }
 
-function getReceiver(attacker: Faction): Faction {
-  return attacker === "pokemon" ? "melody" : "pokemon";
+function toPct(value: number, total: number): string {
+  if (total === 0) return "0.0%";
+  return `${((value / total) * 100).toFixed(1)}%`;
 }
 
-function timerText(elapsed: number): string {
-  const d = Math.floor(elapsed / 86400);
-  const h = Math.floor((elapsed % 86400) / 3600);
-  const m = Math.floor((elapsed % 3600) / 60);
-  const s = Math.floor(elapsed % 60);
-  return `${String(d).padStart(2, "0")}:${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "-";
-  return date.toLocaleString("zh-TW", { hour12: false });
-}
-
-/** Recover the original DuelCard from a played-card record. */
-function lookupCard(played: PlayedCard): DuelCard | undefined {
-  const cardId = played.instanceId.replace(/-\d+$/, "");
-  return deckByFaction[played.from]?.find((c) => c.id === cardId);
-}
-
-/* ─────────────────────── CardTile ─────────────────────── */
-
-type CardSize = "small" | "medium" | "large";
-
-const CARD_DIMS: Record<
-  CardSize,
-  { w: number; h: number; imgH: number; titleSize: number; textSize: number }
-> = {
-  small:  { w: 80,  h: 112, imgH: 50,  titleSize: 6,  textSize: 5 },
-  medium: { w: 110, h: 154, imgH: 72,  titleSize: 8,  textSize: 6 },
-  large:  { w: 230, h: 322, imgH: 160, titleSize: 13, textSize: 10 },
-};
-
-function CardTile({
-  card,
-  size = "medium",
-  onClick,
-  isSelected,
-  style,
-}: {
-  card: DuelCard;
-  size?: CardSize;
-  onClick?: () => void;
-  isSelected?: boolean;
-  style?: React.CSSProperties;
-}) {
-  const [imgError, setImgError] = useState(false);
-  const isPokemon = card.faction === "pokemon";
-  const isPositive = card.score >= 0;
-  const d = CARD_DIMS[size];
-
-  const headerGradient = isPokemon
-    ? "linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%)"
-    : "linear-gradient(135deg, #831843 0%, #ec4899 100%)";
-
-  const imgBg = isPokemon
-    ? "linear-gradient(180deg, #dbeafe 0%, #bfdbfe 60%, #93c5fd 100%)"
-    : "linear-gradient(180deg, #fce7f3 0%, #fbcfe8 60%, #f9a8d4 100%)";
-
-  const borderColor = isPokemon ? "#fbbf24" : "#f472b6";
-
-  return (
-    <div
-      onClick={onClick}
-      className={`card-tile${isSelected ? " card-selected" : ""}${onClick ? " card-clickable" : ""}`}
-      style={{
-        width: d.w,
-        height: d.h,
-        flexShrink: 0,
-        borderRadius: 10,
-        overflow: "hidden",
-        border: `2px solid ${borderColor}`,
-        boxShadow: isSelected
-          ? `0 0 0 3px #fbbf24, 0 8px 24px rgba(0,0,0,0.5)`
-          : `0 4px 16px rgba(0,0,0,0.4)`,
-        display: "flex",
-        flexDirection: "column",
-        cursor: onClick ? "pointer" : "default",
-        position: "relative",
-        ...style,
-      }}
-    >
-      {/* Header */}
-      <div
-        style={{
-          background: headerGradient,
-          padding: `${d.titleSize * 0.4}px ${d.titleSize * 0.6}px`,
-          flexShrink: 0,
-        }}
-      >
-        <div
-          style={{
-            fontSize: d.titleSize,
-            color: "white",
-            fontWeight: 800,
-            lineHeight: 1.2,
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {card.title}
-        </div>
-        <div
-          style={{ fontSize: d.textSize - 1, color: "rgba(255,255,255,0.65)", lineHeight: 1 }}
-        >
-          {card.subtitle}
-        </div>
-      </div>
-
-      {/* Image area */}
-      <div
-        style={{
-          height: d.imgH,
-          background: imgBg,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "hidden",
-          position: "relative",
-          flexShrink: 0,
-        }}
-      >
-        {card.image && !imgError ? (
-          /* eslint-disable-next-line @next/next/no-img-element */
-          <img
-            src={card.image}
-            alt={card.title}
-            onError={() => setImgError(true)}
-            style={{ width: "100%", height: "100%", objectFit: "contain" }}
-          />
-        ) : card.emoji ? (
-          <span style={{ fontSize: d.imgH * 0.45, lineHeight: 1 }}>{card.emoji}</span>
-        ) : (
-          <span style={{ fontSize: d.imgH * 0.3, opacity: 0.4 }}>🃏</span>
-        )}
-
-        {/* Score badge */}
-        <div
-          style={{
-            position: "absolute",
-            bottom: 4,
-            right: 4,
-            background: isPositive ? "rgba(16,185,129,0.92)" : "rgba(239,68,68,0.92)",
-            color: "white",
-            fontWeight: 900,
-            fontSize: d.titleSize + 1,
-            padding: `1px ${d.titleSize * 0.5}px`,
-            borderRadius: 4,
-            fontFamily: "monospace",
-            lineHeight: 1.5,
-          }}
-        >
-          {isPositive ? "+" : ""}
-          {card.score}
-        </div>
-
-        {/* Coming Soon overlay */}
-        {card.isComingSoon && (
-          <div
-            style={{
-              position: "absolute",
-              inset: 0,
-              background: "rgba(0,0,0,0.55)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <span style={{ fontSize: d.textSize + 1, color: "#fbbf24", fontWeight: 700 }}>
-              Coming Soon
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Footer effect text */}
-      <div
-        style={{
-          background: "rgba(0,0,0,0.75)",
-          flex: 1,
-          padding: `${d.textSize * 0.4}px ${d.textSize * 0.6}px`,
-          overflow: "hidden",
-        }}
-      >
-        <div
-          style={{
-            fontSize: d.textSize,
-            color: "#d1d5db",
-            lineHeight: 1.3,
-            display: "-webkit-box",
-            WebkitBoxOrient: "vertical",
-            WebkitLineClamp: size === "large" ? 4 : 2,
-            overflow: "hidden",
-          }}
-        >
-          {card.command}
-        </div>
-      </div>
-
-      {/* Holographic shimmer */}
-      <div className="card-shine-layer" />
-    </div>
-  );
-}
-
-/* ─────────────────────── FanHand ─────────────────────── */
-
-function FanHand({
-  cards,
-  onPlayRequest,
-}: {
-  cards: DuelCard[];
-  onPlayRequest: () => void;
-}) {
-  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
-  const handCards = cards.slice(0, 7);
-  const total = handCards.length;
-
-  return (
-    <div
-      style={{
-        position: "relative",
-        width: "100%",
-        height: "200px",
-        display: "flex",
-        justifyContent: "center",
-        alignItems: "flex-end",
-      }}
-    >
-      {handCards.map((card, i) => {
-        const center = (total - 1) / 2;
-        const offset = i - center;
-        const rotation = offset * 9;
-        const baseY = Math.abs(offset) * 8;
-        const translateX = offset * 38;
-        const isHovered = hoveredIdx === i;
-
-        return (
-          <div
-            key={card.id}
-            onMouseEnter={() => setHoveredIdx(i)}
-            onMouseLeave={() => setHoveredIdx(null)}
-            onClick={onPlayRequest}
-            style={{
-              position: "absolute",
-              bottom: 0,
-              left: "50%",
-              transform: `translateX(calc(-50% + ${translateX}px)) translateY(${
-                isHovered ? -32 : baseY
-              }px) rotate(${isHovered ? 0 : rotation}deg)`,
-              transformOrigin: "bottom center",
-              zIndex: isHovered ? 50 : total - Math.abs(Math.round(offset)),
-              transition: "transform 0.18s ease",
-              cursor: "pointer",
-            }}
-          >
-            <CardTile card={card} size="medium" />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ─────────────────────── CardCarousel ─────────────────────── */
-
-function CardCarousel({
-  deck,
-  onPlay,
-  onClose,
-}: {
-  deck: DuelCard[];
-  onPlay: (card: DuelCard) => void;
-  onClose: () => void;
-}) {
-  const [index, setIndex] = useState(0);
-
-  const total = deck.length;
-  const cur = deck[index];
-  const prevIdx = (index - 1 + total) % total;
-  const nextIdx = (index + 1) % total;
-
-  const prev = () => setIndex((i) => (i - 1 + deck.length) % deck.length);
-  const next = () => setIndex((i) => (i + 1) % deck.length);
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") setIndex((i) => (i - 1 + deck.length) % deck.length);
-      else if (e.key === "ArrowRight") setIndex((i) => (i + 1) % deck.length);
-      else if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [deck.length, onClose]);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center"
-      style={{ background: "rgba(0,0,0,0.82)", backdropFilter: "blur(6px)" }}
-      onClick={onClose}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 20 }}
-      >
-        <div style={{ textAlign: "center" }}>
-          <div style={{ color: "white", fontSize: 14, fontWeight: 700 }}>選擇出牌</div>
-          <div style={{ color: "#9ca3af", fontSize: 12 }}>
-            {index + 1} / {total} · 使用方向鍵或點擊切換
-          </div>
-        </div>
-
-        {/* Three-card stack */}
-        <div style={{ display: "flex", alignItems: "center", gap: 0 }}>
-          <div
-            onClick={prev}
-            style={{
-              transform: "scale(0.72) translateX(40px)",
-              opacity: 0.45,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              zIndex: 1,
-            }}
-          >
-            <CardTile card={deck[prevIdx]} size="large" />
-          </div>
-
-          <div style={{ zIndex: 2, transform: "scale(1)", transition: "all 0.25s ease" }}>
-            <CardTile card={cur} size="large" isSelected />
-          </div>
-
-          <div
-            onClick={next}
-            style={{
-              transform: "scale(0.72) translateX(-40px)",
-              opacity: 0.45,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-              zIndex: 1,
-            }}
-          >
-            <CardTile card={deck[nextIdx]} size="large" />
-          </div>
-        </div>
-
-        {/* Navigation row */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <button
-            onClick={prev}
-            style={{
-              background: "rgba(255,255,255,0.12)",
-              border: "none",
-              borderRadius: 8,
-              padding: "8px 12px",
-              color: "white",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            <ChevronLeft size={20} />
-          </button>
-
-          <button
-            onClick={() => onPlay(cur)}
-            disabled={cur.isComingSoon}
-            style={{
-              background: cur.isComingSoon ? "rgba(255,255,255,0.1)" : "#10b981",
-              border: "none",
-              borderRadius: 12,
-              padding: "10px 28px",
-              color: cur.isComingSoon ? "#6b7280" : "#022c22",
-              fontWeight: 800,
-              fontSize: 14,
-              cursor: cur.isComingSoon ? "not-allowed" : "pointer",
-            }}
-          >
-            {cur.isComingSoon ? "Coming Soon" : "⚡ 出此牌"}
-          </button>
-
-          <button
-            onClick={next}
-            style={{
-              background: "rgba(255,255,255,0.12)",
-              border: "none",
-              borderRadius: 8,
-              padding: "8px 12px",
-              color: "white",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            <ChevronRight size={20} />
-          </button>
-        </div>
-
-        <button
-          onClick={onClose}
-          style={{
-            background: "transparent",
-            border: "1px solid rgba(255,255,255,0.2)",
-            borderRadius: 8,
-            padding: "4px 14px",
-            color: "#9ca3af",
-            fontSize: 12,
-            cursor: "pointer",
-          }}
-        >
-          取消
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────── ZoneHeader ─────────────────────── */
-
-function ZoneHeader({
-  faction,
-  label,
-  isAttacker,
-  score,
-  factionName,
-}: {
-  faction: Faction;
-  label: string;
-  isAttacker: boolean;
-  score: number;
-  factionName: Record<Faction, string>;
-}) {
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "6px 16px",
-        borderBottom: "1px solid rgba(255,255,255,0.08)",
-        flexShrink: 0,
-      }}
-    >
-      <div>
-        <div
-          style={{
-            fontSize: 10,
-            color: "#9ca3af",
-            textTransform: "uppercase",
-            letterSpacing: "0.1em",
-          }}
-        >
-          {label}
-        </div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: "white" }}>
-          {factionName[faction]} CHR 陣營
-        </div>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <span
-          style={{
-            fontSize: 10,
-            padding: "2px 8px",
-            borderRadius: 12,
-            background: isAttacker ? "rgba(16,185,129,0.2)" : "rgba(99,102,241,0.2)",
-            color: isAttacker ? "#6ee7b7" : "#a5b4fc",
-          }}
-        >
-          {isAttacker ? "出牌方 ⚔️" : "接收方 🛡"}
-        </span>
-        <div
-          style={{
-            fontFamily: "monospace",
-            fontSize: 20,
-            fontWeight: 900,
-            color: score >= 0 ? "#6ee7b7" : "#fca5a5",
-          }}
-        >
-          {score >= 0 ? "+" : ""}
-          {score}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────── ReceivedRow ─────────────────────── */
-
-function ReceivedRow({ received }: { received: PlayedCard[] }) {
-  if (received.length === 0) {
-    return (
-      <div style={{ color: "#6b7280", fontSize: 12, padding: "8px 16px" }}>
-        尚未接收任何卡牌...
-      </div>
-    );
+function weeklyBuckets(records: CompanyMonitoringRecord[]) {
+  const map = new Map<string, { total: number; full: number; partial: number; notReady: number }>();
+  for (const row of records) {
+    const date = row.earningsEventDatetime ? new Date(row.earningsEventDatetime) : null;
+    const key = date
+      ? `W${Math.ceil((date.getUTCDate() + (date.getUTCMonth() === 7 ? 31 : 0) - 9) / 7)}`
+      : "W0";
+    if (!map.has(key)) {
+      map.set(key, { total: 0, full: 0, partial: 0, notReady: 0 });
+    }
+    const bucket = map.get(key);
+    if (!bucket) continue;
+    bucket.total += 1;
+    if (row.readiness === "fully_ready") bucket.full += 1;
+    if (row.readiness === "partial_ready") bucket.partial += 1;
+    if (row.readiness === "not_ready") bucket.notReady += 1;
   }
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 8,
-        overflowX: "auto",
-        padding: "8px 16px 12px",
-        scrollbarWidth: "thin",
-      }}
-    >
-      {received.slice(0, 12).map((played) => {
-        const cardDef = lookupCard(played);
-        if (cardDef) {
-          return <CardTile key={played.instanceId} card={cardDef} size="small" />;
-        }
-        return (
-          <div
-            key={played.instanceId}
-            style={{
-              width: 80,
-              height: 112,
-              flexShrink: 0,
-              borderRadius: 8,
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.12)",
-              padding: "6px",
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "space-between",
-            }}
-          >
-            <div style={{ fontSize: 7, color: "white", fontWeight: 700 }}>{played.title}</div>
-            <div
-              style={{
-                fontFamily: "monospace",
-                fontSize: 11,
-                fontWeight: 900,
-                color: played.score >= 0 ? "#6ee7b7" : "#fca5a5",
-              }}
-            >
-              {played.score >= 0 ? "+" : ""}
-              {played.score}
-            </div>
-          </div>
-        );
-      })}
-      {received.length > 12 && (
-        <div style={{ color: "#9ca3af", fontSize: 11, flexShrink: 0 }}>
-          +{received.length - 12} 張
-        </div>
-      )}
-    </div>
-  );
+  return [...map.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([week, values]) => ({ week, ...values }));
 }
 
-/* ─────────────────────── ActionLog ─────────────────────── */
-
-function ActionLog({
-  attacker,
-  receiverReceived,
-}: {
-  attacker: Faction;
-  receiverReceived: PlayedCard[];
-}) {
-  const myPlays = receiverReceived.filter((p) => p.from === attacker).slice(0, 6);
-  return (
-    <div
-      style={{
-        width: 160,
-        flexShrink: 0,
-        borderRight: "1px solid rgba(255,255,255,0.08)",
-        overflowY: "auto",
-        padding: "8px",
-        scrollbarWidth: "thin",
-      }}
-    >
-      <div
-        style={{
-          fontSize: 10,
-          color: "#9ca3af",
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-          marginBottom: 6,
-        }}
-      >
-        最近行動
-      </div>
-      {myPlays.length === 0 ? (
-        <div style={{ fontSize: 11, color: "#4b5563" }}>尚無出牌</div>
-      ) : (
-        myPlays.map((p) => (
-          <div
-            key={p.instanceId}
-            style={{
-              marginBottom: 6,
-              padding: "5px 6px",
-              borderRadius: 6,
-              background: "rgba(0,0,0,0.25)",
-              border: "1px solid rgba(255,255,255,0.08)",
-            }}
-          >
-            <div
-              style={{
-                fontSize: 9,
-                color: "white",
-                fontWeight: 700,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {p.title}
-            </div>
-            <div
-              style={{
-                fontSize: 9,
-                fontFamily: "monospace",
-                color: p.score >= 0 ? "#6ee7b7" : "#fca5a5",
-              }}
-            >
-              {p.score >= 0 ? "+" : ""}
-              {p.score} · {formatDate(p.playedAt).slice(5)}
-            </div>
-          </div>
-        ))
-      )}
-    </div>
-  );
+function statusDot(status: ReportStatus) {
+  if (status === "fully_reported") return "#10b981";
+  if (status === "partial_ready") return "#f59e0b";
+  return "#ef4444";
 }
-
-/* ─────────────────────── SidebarContent ─────────────────────── */
-
-function SidebarContent({
-  elapsed,
-  battleStats,
-  duel,
-  attacker,
-  factionName,
-  onPlay,
-  onSwap,
-  onSettings,
-}: {
-  elapsed: number;
-  battleStats: { totalPlays: number; pokemonSent: number; melodySent: number };
-  duel: DuelState;
-  attacker: Faction;
-  factionName: Record<Faction, string>;
-  onPlay: () => void;
-  onSwap: () => void;
-  onSettings: () => void;
-}) {
-  return (
-    <div
-      style={{
-        height: "100%",
-        overflowY: "auto",
-        padding: "12px",
-        display: "flex",
-        flexDirection: "column",
-        gap: 12,
-      }}
-    >
-      <h1 style={{ fontSize: 13, fontWeight: 900, color: "white", margin: 0, lineHeight: 1.3 }}>
-        雙人 CHR
-        <br />
-        卡牌對戰場
-      </h1>
-
-      {/* Timer */}
-      <div
-        style={{
-          borderRadius: 10,
-          border: "1px solid rgba(251,191,36,0.3)",
-          background: "rgba(245,158,11,0.1)",
-          padding: "8px 10px",
-        }}
-      >
-        <div
-          style={{
-            fontSize: 10,
-            color: "#fde68a",
-            display: "flex",
-            alignItems: "center",
-            gap: 4,
-          }}
-        >
-          <Clock3 size={10} /> 時間計算器
-        </div>
-        <div
-          style={{ fontFamily: "monospace", fontSize: 13, fontWeight: 700, color: "#fef3c7" }}
-        >
-          {timerText(elapsed)}
-        </div>
-      </div>
-
-      {/* Stats */}
-      <div
-        style={{
-          borderRadius: 10,
-          border: "1px solid rgba(255,255,255,0.1)",
-          background: "rgba(0,0,0,0.25)",
-          padding: "8px 10px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 4,
-        }}
-      >
-        <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 2 }}>對戰統計</div>
-        {(
-          [
-            ["總出牌", battleStats.totalPlays, "#67e8f9"],
-            ["寶可夢", battleStats.pokemonSent, "#93c5fd"],
-            ["美樂蒂", battleStats.melodySent, "#f9a8d4"],
-          ] as const
-        ).map(([label, val, color]) => (
-          <div
-            key={label}
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-          >
-            <span style={{ fontSize: 11, color: "#d1d5db" }}>{label}</span>
-            <span
-              style={{
-                fontFamily: "monospace",
-                fontSize: 14,
-                fontWeight: 700,
-                color,
-              }}
-            >
-              {val}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Scores */}
-      <div
-        style={{
-          borderRadius: 10,
-          border: "1px solid rgba(255,255,255,0.1)",
-          background: "rgba(0,0,0,0.25)",
-          padding: "8px 10px",
-          display: "flex",
-          flexDirection: "column",
-          gap: 4,
-        }}
-      >
-        <div style={{ fontSize: 10, color: "#9ca3af", marginBottom: 2 }}>對戰分數</div>
-        {(["pokemon", "melody"] as Faction[]).map((f) => (
-          <div
-            key={f}
-            style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
-          >
-            <span style={{ fontSize: 11, color: "#d1d5db" }}>{factionName[f]}</span>
-            <span
-              style={{
-                fontFamily: "monospace",
-                fontSize: 16,
-                fontWeight: 900,
-                color: duel[f].score >= 0 ? "#6ee7b7" : "#fca5a5",
-              }}
-            >
-              {duel[f].score >= 0 ? "+" : ""}
-              {duel[f].score}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      {/* Current attacker */}
-      <div
-        style={{
-          borderRadius: 10,
-          background: "rgba(16,185,129,0.12)",
-          border: "1px solid rgba(16,185,129,0.3)",
-          padding: "6px 10px",
-          fontSize: 11,
-          color: "#6ee7b7",
-        }}
-      >
-        ⚔️ 目前出牌方：{factionName[attacker]}
-      </div>
-
-      {/* Action buttons */}
-      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-        <button
-          onClick={onPlay}
-          style={{
-            background: "#10b981",
-            border: "none",
-            borderRadius: 10,
-            padding: "9px 0",
-            color: "#022c22",
-            fontWeight: 800,
-            fontSize: 13,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-          }}
-        >
-          <Swords size={14} /> 出牌
-        </button>
-
-        <button
-          onClick={onSwap}
-          style={{
-            background: "rgba(255,255,255,0.08)",
-            border: "1px solid rgba(255,255,255,0.15)",
-            borderRadius: 10,
-            padding: "8px 0",
-            color: "white",
-            fontWeight: 600,
-            fontSize: 12,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-          }}
-        >
-          <RefreshCw size={12} /> 換手
-        </button>
-
-        <button
-          onClick={onSettings}
-          style={{
-            background: "rgba(255,255,255,0.06)",
-            border: "1px solid rgba(255,255,255,0.1)",
-            borderRadius: 10,
-            padding: "8px 0",
-            color: "#d1d5db",
-            fontSize: 12,
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            gap: 6,
-          }}
-        >
-          <Settings2 size={12} /> 設定
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* ─────────────────────── Main component ─────────────────────── */
 
 export default function Home() {
-  const [duel, setDuel] = useState<DuelState>(() => {
-    if (typeof window === "undefined") return DEFAULT_STATE;
-    const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_STATE;
-    try {
-      return normalizeState(JSON.parse(raw));
-    } catch {
-      return DEFAULT_STATE;
-    }
-  });
-  const [showCardPicker, setShowCardPicker] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  const [showSidebar, setShowSidebar] = useState(false);
-  const [elapsed, setElapsed] = useState(0);
+  const [query, setQuery] = useState("");
+  const [sector, setSector] = useState("all");
+  const [readiness, setReadiness] = useState<"all" | OverallReadiness>("all");
 
-  useEffect(() => {
-    const updateElapsed = () => {
-      const sec = Math.max(0, Math.floor((Date.now() - START_DATE.getTime()) / 1000));
-      setElapsed(sec);
-    };
-    updateElapsed();
-    const id = window.setInterval(updateElapsed, 1000);
-    return () => window.clearInterval(id);
-  }, []);
-
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(duel));
-  }, [duel]);
-
-  const factionName: Record<Faction, string> = { pokemon: "寶可夢", melody: "美樂蒂" };
-  const attacker = duel.activeAttacker;
-  const receiver = getReceiver(attacker);
-  const attackerDeck = deckByFaction[attacker];
-  const activeTheme = ARENA_THEMES[duel.arenaTheme];
-
-  const battleStats = useMemo(
-    () => ({
-      totalPlays: duel.pokemon.received.length + duel.melody.received.length,
-      pokemonSent: duel.melody.received.length,
-      melodySent: duel.pokemon.received.length,
-    }),
-    [duel]
+  const sectors = useMemo(
+    () => ["all", ...Array.from(new Set(monitoringRecords.map((item) => item.sector))).sort()],
+    []
   );
 
-  const playCard = (card: DuelCard) => {
-    if (card.isComingSoon) return;
-    setDuel((prev) => {
-      const from = prev.activeAttacker;
-      const to = getReceiver(from);
-      const played: PlayedCard = {
-        instanceId: `${card.id}-${prev.nextPlayId}`,
-        from,
-        to,
-        title: card.title,
-        subtitle: card.subtitle,
-        score: card.score,
-        command: card.command,
-        playedAt: new Date().toISOString(),
-      };
-      return {
-        ...prev,
-        nextPlayId: prev.nextPlayId + 1,
-        [to]: {
-          ...prev[to],
-          score: prev[to].score + card.score,
-          received: [played, ...prev[to].received],
-        },
-      };
+  const filtered = useMemo(() => {
+    const lowered = query.trim().toLowerCase();
+    return monitoringRecords.filter((row) => {
+      if (sector !== "all" && row.sector !== sector) return false;
+      if (readiness !== "all" && row.readiness !== readiness) return false;
+      if (!lowered) return true;
+      return (
+        row.companyName.toLowerCase().includes(lowered) ||
+        row.ticker.toLowerCase().includes(lowered) ||
+        row.region.toLowerCase().includes(lowered)
+      );
     });
-    setShowCardPicker(false);
-  };
+  }, [query, sector, readiness]);
 
-  const swapTurn = () => {
-    setDuel((prev) => ({ ...prev, activeAttacker: getReceiver(prev.activeAttacker) }));
-  };
+  const stats = useMemo(() => {
+    const total = filtered.length;
+    const full = filtered.filter((row) => row.readiness === "fully_ready").length;
+    const partial = filtered.filter((row) => row.readiness === "partial_ready").length;
+    const notReady = filtered.filter((row) => row.readiness === "not_ready").length;
+    const earningsPublished = filtered.filter((row) => row.earningsPublished).length;
+    const segmentMissing = filtered.filter(
+      (row) => row.segmentReportStatus === "not_published"
+    ).length;
+    return { total, full, partial, notReady, earningsPublished, segmentMissing };
+  }, [filtered]);
 
-  const resetDuel = () => {
-    setDuel(DEFAULT_STATE);
-    setShowSettings(false);
-    setShowCardPicker(false);
-  };
+  const topRisks = useMemo(
+    () => filtered.filter((row) => row.readiness !== "fully_ready").slice(0, 12),
+    [filtered]
+  );
+
+  const buckets = useMemo(() => weeklyBuckets(filtered), [filtered]);
 
   return (
     <div
       style={{
-        display: "flex",
-        height: "100vh",
-        overflow: "hidden",
-        background: activeTheme.appBg,
+        minHeight: "100vh",
+        background:
+          "radial-gradient(circle at 10% 10%, rgba(37,99,235,0.25), transparent 40%), radial-gradient(circle at 90% 0%, rgba(180,83,9,0.2), transparent 38%), #020617",
+        color: "#e2e8f0",
       }}
     >
-      {/* ── Sidebar ── */}
-      <aside
-        style={{
-          width: showSidebar ? 220 : 44,
-          flexShrink: 0,
-          transition: "width 0.28s ease",
-          overflow: "hidden",
-          borderRight: "1px solid rgba(255,255,255,0.08)",
-          background: "rgba(0,0,0,0.3)",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        <button
-          onClick={() => setShowSidebar((s) => !s)}
-          title={showSidebar ? "收合側欄" : "展開側欄"}
+      <div style={{ maxWidth: 1400, margin: "0 auto", padding: "28px 20px 40px" }}>
+        <header
           style={{
-            flexShrink: 0,
-            height: 44,
-            width: "100%",
-            background: "transparent",
-            border: "none",
-            borderBottom: "1px solid rgba(255,255,255,0.08)",
-            color: "rgba(255,255,255,0.6)",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: showSidebar ? "flex-end" : "center",
-            padding: showSidebar ? "0 12px" : "0",
-            gap: 6,
+            border: "1px solid rgba(148,163,184,0.2)",
+            background: "rgba(15,23,42,0.75)",
+            borderRadius: 18,
+            padding: "20px 22px",
+            marginBottom: 18,
           }}
         >
-          {showSidebar ? (
-            <>
-              <span style={{ fontSize: 11, color: "#9ca3af" }}>收合</span>
-              <PanelLeftClose size={16} />
-            </>
-          ) : (
-            <PanelLeftOpen size={16} />
-          )}
-        </button>
-
-        <div
-          style={{
-            flex: 1,
-            overflow: "hidden",
-            opacity: showSidebar ? 1 : 0,
-            transition: "opacity 0.15s ease",
-            pointerEvents: showSidebar ? "auto" : "none",
-          }}
-        >
-          <SidebarContent
-            elapsed={elapsed}
-            battleStats={battleStats}
-            duel={duel}
-            attacker={attacker}
-            factionName={factionName}
-            onPlay={() => setShowCardPicker(true)}
-            onSwap={swapTurn}
-            onSettings={() => setShowSettings(true)}
-          />
-        </div>
-      </aside>
-
-      {/* ── Main battle area ── */}
-      <main
-        style={{
-          flex: 1,
-          display: "flex",
-          flexDirection: "column",
-          overflow: "hidden",
-          minWidth: 0,
-        }}
-      >
-        {/* Opponent zone (top) */}
-        <div
-          style={{
-            flex: 1,
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            background: activeTheme.topBg,
-            minHeight: 0,
-          }}
-        >
-          <ZoneHeader
-            faction={receiver}
-            label="上方玩家 · 對手接收區"
-            isAttacker={false}
-            score={duel[receiver].score}
-            factionName={factionName}
-          />
-          <div style={{ flex: 1, overflow: "hidden" }}>
-            <ReceivedRow received={duel[receiver].received} />
+          <div style={{ fontSize: 12, color: "#93c5fd", letterSpacing: "0.08em", textTransform: "uppercase" }}>
+            Eggroll · Financial / Marketing Intelligence
           </div>
-        </div>
+          <h1 style={{ margin: "8px 0 6px", fontSize: 30, color: "#f8fafc" }}>
+            2026 Q2 Earnings & Segment Report Monitoring
+          </h1>
+          <p style={{ margin: 0, color: "#94a3b8", fontSize: 14 }}>
+            Flattened sourcing pipeline with sesame-style anomaly highlighting for data sourcing owners.
+          </p>
+        </header>
 
-        {/* Divider */}
-        <div
+        <section
           style={{
-            height: 2,
-            flexShrink: 0,
-            background: `linear-gradient(90deg, transparent, ${activeTheme.divider}, transparent)`,
+            display: "grid",
+            gridTemplateColumns: "2fr 1fr 1fr",
+            gap: 12,
+            marginBottom: 14,
           }}
-        />
-
-        {/* Player zone (bottom) */}
-        <div
-          style={{
-            flex: 1.4,
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-            background: activeTheme.bottomBg,
-            minHeight: 0,
-          }}
-        >
-          <ZoneHeader
-            faction={attacker}
-            label="下方玩家 · 我的出牌區"
-            isAttacker={true}
-            score={duel[attacker].score}
-            factionName={factionName}
-          />
-
-          <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
-            <ActionLog
-              attacker={attacker}
-              receiverReceived={duel[receiver].received}
-            />
-
-            {/* Fan hand area */}
-            <div
-              style={{
-                flex: 1,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                padding: "8px 8px 12px",
-                overflow: "hidden",
-                position: "relative",
-              }}
-            >
-              <div style={{ fontSize: 10, color: "#6b7280", marginBottom: 4, textAlign: "center" }}>
-                手牌預覽 · 點擊任意牌或下方按鈕出牌
-              </div>
-              <FanHand
-                cards={attackerDeck.filter((c) => !c.isComingSoon)}
-                onPlayRequest={() => setShowCardPicker(true)}
-              />
-              <button
-                onClick={() => setShowCardPicker(true)}
-                style={{
-                  marginTop: 10,
-                  background: "#10b981",
-                  border: "none",
-                  borderRadius: 10,
-                  padding: "8px 24px",
-                  color: "#022c22",
-                  fontWeight: 800,
-                  fontSize: 13,
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                }}
-              >
-                <Swords size={14} /> 出牌（{factionName[attacker]}）
-              </button>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      {/* Card carousel overlay */}
-      {showCardPicker && (
-        <CardCarousel
-          deck={attackerDeck}
-          onPlay={playCard}
-          onClose={() => setShowCardPicker(false)}
-        />
-      )}
-
-      {/* Settings modal */}
-      {showSettings && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center"
-          style={{ background: "rgba(0,0,0,0.7)", backdropFilter: "blur(4px)" }}
-          onClick={() => setShowSettings(false)}
         >
           <div
-            onClick={(e) => e.stopPropagation()}
             style={{
-              background: "#0f172a",
-              border: "1px solid rgba(255,255,255,0.12)",
-              borderRadius: 16,
-              padding: 20,
-              width: 320,
-              maxWidth: "90vw",
+              border: "1px solid rgba(148,163,184,0.2)",
+              background: "rgba(15,23,42,0.7)",
+              borderRadius: 14,
+              padding: 12,
+              display: "flex",
+              gap: 8,
+              alignItems: "center",
             }}
           >
-            <div
+            <Search size={15} color="#93c5fd" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search company / ticker / region"
               style={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                marginBottom: 12,
+                flex: 1,
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                color: "#e2e8f0",
+                fontSize: 14,
+              }}
+            />
+          </div>
+          <label
+            style={{
+              border: "1px solid rgba(148,163,184,0.2)",
+              background: "rgba(15,23,42,0.7)",
+              borderRadius: 14,
+              padding: "0 10px",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <Filter size={15} color="#93c5fd" />
+            <select
+              value={sector}
+              onChange={(e) => setSector(e.target.value)}
+              style={{
+                width: "100%",
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                color: "#e2e8f0",
+                height: 40,
               }}
             >
-              <h3
-                style={{ color: "white", fontSize: 14, fontWeight: 700, margin: 0 }}
-              >
-                對戰場景設定
-              </h3>
-              <button
-                onClick={() => setShowSettings(false)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "#9ca3af",
-                  cursor: "pointer",
-                }}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <p style={{ color: "#9ca3af", fontSize: 12, marginBottom: 12 }}>
-              切換底部場景配色，兩方共用。
-            </p>
-
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {(Object.keys(ARENA_THEMES) as ArenaTheme[]).map((themeKey) => (
-                <button
-                  key={themeKey}
-                  onClick={() => setDuel((prev) => ({ ...prev, arenaTheme: themeKey }))}
-                  style={{
-                    background:
-                      duel.arenaTheme === themeKey
-                        ? "rgba(6,182,212,0.12)"
-                        : "rgba(255,255,255,0.04)",
-                    border: `1px solid ${
-                      duel.arenaTheme === themeKey
-                        ? "rgba(6,182,212,0.5)"
-                        : "rgba(255,255,255,0.08)"
-                    }`,
-                    borderRadius: 8,
-                    padding: "8px 12px",
-                    color: duel.arenaTheme === themeKey ? "#67e8f9" : "#d1d5db",
-                    fontSize: 13,
-                    cursor: "pointer",
-                    textAlign: "left",
-                  }}
-                >
-                  {ARENA_THEMES[themeKey].name}
-                </button>
+              {sectors.map((item) => (
+                <option key={item} value={item} style={{ color: "#020617" }}>
+                  {item === "all" ? "All sectors" : item}
+                </option>
               ))}
-            </div>
-
-            <div
-              style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 16 }}
+            </select>
+          </label>
+          <label
+            style={{
+              border: "1px solid rgba(148,163,184,0.2)",
+              background: "rgba(15,23,42,0.7)",
+              borderRadius: 14,
+              padding: "0 10px",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+            }}
+          >
+            <BarChart3 size={15} color="#93c5fd" />
+            <select
+              value={readiness}
+              onChange={(e) => setReadiness(e.target.value as "all" | OverallReadiness)}
+              style={{
+                width: "100%",
+                background: "transparent",
+                border: "none",
+                outline: "none",
+                color: "#e2e8f0",
+                height: 40,
+              }}
             >
-              <button
-                onClick={resetDuel}
-                style={{
-                  background: "rgba(239,68,68,0.1)",
-                  border: "1px solid rgba(239,68,68,0.3)",
-                  borderRadius: 8,
-                  padding: "6px 14px",
-                  color: "#fca5a5",
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                重置對戰
-              </button>
-              <button
-                onClick={() => setShowSettings(false)}
-                style={{
-                  background: "rgba(255,255,255,0.06)",
-                  border: "1px solid rgba(255,255,255,0.12)",
-                  borderRadius: 8,
-                  padding: "6px 14px",
-                  color: "#e5e7eb",
-                  fontSize: 12,
-                  cursor: "pointer",
-                }}
-              >
-                完成
-              </button>
+              <option value="all" style={{ color: "#020617" }}>
+                All readiness
+              </option>
+              <option value="fully_ready" style={{ color: "#020617" }}>
+                Fully Ready
+              </option>
+              <option value="partial_ready" style={{ color: "#020617" }}>
+                Partial Ready
+              </option>
+              <option value="not_ready" style={{ color: "#020617" }}>
+                Not Ready
+              </option>
+            </select>
+          </label>
+        </section>
+
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(5, minmax(0, 1fr))",
+            gap: 12,
+            marginBottom: 14,
+          }}
+        >
+          {[
+            {
+              label: "Companies in scope",
+              value: stats.total,
+              helper: `${toPct(stats.total, monitoringRecords.length)} of 253`,
+              icon: CalendarClock,
+              color: "#38bdf8",
+            },
+            {
+              label: "Earnings announced",
+              value: stats.earningsPublished,
+              helper: toPct(stats.earningsPublished, stats.total),
+              icon: CheckCircle2,
+              color: "#34d399",
+            },
+            {
+              label: "Fully ready",
+              value: stats.full,
+              helper: toPct(stats.full, stats.total),
+              icon: CheckCircle2,
+              color: "#22c55e",
+            },
+            {
+              label: "Partial ready",
+              value: stats.partial,
+              helper: toPct(stats.partial, stats.total),
+              icon: BarChart3,
+              color: "#f59e0b",
+            },
+            {
+              label: "Critical gaps",
+              value: stats.notReady,
+              helper: `${stats.segmentMissing} segment missing`,
+              icon: AlertTriangle,
+              color: "#ef4444",
+            },
+          ].map((card) => (
+            <div
+              key={card.label}
+              style={{
+                border: "1px solid rgba(148,163,184,0.2)",
+                background: "rgba(15,23,42,0.72)",
+                borderRadius: 14,
+                padding: 12,
+              }}
+            >
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ fontSize: 12, color: "#94a3b8" }}>{card.label}</div>
+                <card.icon size={14} color={card.color} />
+              </div>
+              <div style={{ marginTop: 7, fontSize: 28, fontWeight: 800, color: "#f8fafc" }}>{card.value}</div>
+              <div style={{ fontSize: 12, color: card.color }}>{card.helper}</div>
+            </div>
+          ))}
+        </section>
+
+        <section
+          style={{
+            display: "grid",
+            gridTemplateColumns: "1.8fr 1fr",
+            gap: 12,
+            marginBottom: 14,
+          }}
+        >
+          <div
+            style={{
+              border: "1px solid rgba(148,163,184,0.2)",
+              background: "rgba(15,23,42,0.72)",
+              borderRadius: 14,
+              padding: 14,
+            }}
+          >
+            <div style={{ fontSize: 12, color: "#93c5fd", marginBottom: 10 }}>Readiness by earnings week</div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {buckets.map((bucket) => {
+                const scale = Math.max(bucket.total, 1);
+                const fullWidth = (bucket.full / scale) * 100;
+                const partialWidth = (bucket.partial / scale) * 100;
+                const notWidth = (bucket.notReady / scale) * 100;
+                return (
+                  <div key={bucket.week} style={{ display: "grid", gridTemplateColumns: "58px 1fr 60px", gap: 10 }}>
+                    <div style={{ fontSize: 12, color: "#cbd5e1" }}>{bucket.week}</div>
+                    <div
+                      style={{
+                        height: 14,
+                        background: "rgba(51,65,85,0.45)",
+                        borderRadius: 99,
+                        overflow: "hidden",
+                        display: "flex",
+                      }}
+                    >
+                      <div style={{ width: `${fullWidth}%`, background: READINESS_COLOR.fully_ready }} />
+                      <div style={{ width: `${partialWidth}%`, background: READINESS_COLOR.partial_ready }} />
+                      <div style={{ width: `${notWidth}%`, background: READINESS_COLOR.not_ready }} />
+                    </div>
+                    <div style={{ textAlign: "right", fontSize: 12, color: "#94a3b8" }}>{bucket.total}</div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </div>
-      )}
+
+          <div
+            style={{
+              border: "1px solid rgba(248,113,113,0.4)",
+              background: "rgba(127,29,29,0.15)",
+              borderRadius: 14,
+              padding: 14,
+            }}
+          >
+            <div style={{ fontSize: 12, color: "#fca5a5", marginBottom: 10 }}>
+              Sesame alerts · top unresolved companies
+            </div>
+            <div style={{ display: "grid", gap: 8 }}>
+              {topRisks.length === 0 ? (
+                <div style={{ color: "#86efac", fontSize: 13 }}>No unresolved items.</div>
+              ) : (
+                topRisks.map((row) => (
+                  <div
+                    key={row.id}
+                    style={{
+                      border: "1px solid rgba(248,113,113,0.35)",
+                      borderRadius: 10,
+                      padding: "7px 8px",
+                      background: "rgba(15,23,42,0.6)",
+                    }}
+                  >
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 6 }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: "#f8fafc" }}>{row.companyName}</div>
+                      <div style={{ fontSize: 11, color: "#fca5a5" }}>{row.ticker}</div>
+                    </div>
+                    <div style={{ fontSize: 11, color: "#fecaca", marginTop: 4 }}>{row.issueTags.join(" · ")}</div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section
+          style={{
+            border: "1px solid rgba(148,163,184,0.2)",
+            background: "rgba(15,23,42,0.72)",
+            borderRadius: 14,
+            overflow: "hidden",
+          }}
+        >
+          <div style={{ padding: "12px 14px", fontSize: 12, color: "#93c5fd", borderBottom: "1px solid rgba(148,163,184,0.15)" }}>
+            Monitoring table ({filtered.length} rows)
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={{ width: "100%", borderCollapse: "collapse", minWidth: 1200 }}>
+              <thead>
+                <tr style={{ background: "rgba(30,41,59,0.65)", textAlign: "left" }}>
+                  {[
+                    "Company",
+                    "Ticker",
+                    "Sector",
+                    "Region",
+                    "2026 Q2 earnings event",
+                    "Financial report",
+                    "Segment report",
+                    "Overall",
+                    "Issue highlights",
+                  ].map((head) => (
+                    <th key={head} style={{ padding: "10px 12px", fontSize: 12, color: "#cbd5e1", whiteSpace: "nowrap" }}>
+                      {head}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((row) => (
+                  <tr
+                    key={row.id}
+                    style={{
+                      borderTop: "1px solid rgba(148,163,184,0.12)",
+                      background:
+                        row.readiness === "not_ready"
+                          ? "rgba(127,29,29,0.18)"
+                          : row.readiness === "partial_ready"
+                            ? "rgba(120,53,15,0.12)"
+                            : "transparent",
+                    }}
+                  >
+                    <td style={{ padding: "9px 12px", fontSize: 13, color: "#f8fafc", fontWeight: 600 }}>
+                      {row.companyName}
+                    </td>
+                    <td style={{ padding: "9px 12px", fontFamily: "monospace", color: "#93c5fd", fontSize: 12 }}>{row.ticker}</td>
+                    <td style={{ padding: "9px 12px", fontSize: 12, color: "#cbd5e1" }}>{row.sector}</td>
+                    <td style={{ padding: "9px 12px", fontSize: 12, color: "#cbd5e1" }}>{row.region}</td>
+                    <td style={{ padding: "9px 12px", fontSize: 12, color: row.earningsPublished ? "#86efac" : "#fca5a5" }}>
+                      {formatDateTime(row.earningsEventDatetime)}
+                    </td>
+                    <td style={{ padding: "9px 12px", fontSize: 12, color: "#cbd5e1" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: 999,
+                            background: statusDot(row.financialReportStatus),
+                          }}
+                        />
+                        {REPORT_LABEL[row.financialReportStatus]}
+                      </span>
+                    </td>
+                    <td style={{ padding: "9px 12px", fontSize: 12, color: "#cbd5e1" }}>
+                      <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                        <span
+                          style={{ width: 8, height: 8, borderRadius: 999, background: statusDot(row.segmentReportStatus) }}
+                        />
+                        {REPORT_LABEL[row.segmentReportStatus]}
+                      </span>
+                    </td>
+                    <td style={{ padding: "9px 12px", fontSize: 12 }}>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          padding: "2px 8px",
+                          borderRadius: 999,
+                          background: `${READINESS_COLOR[row.readiness]}22`,
+                          color: READINESS_COLOR[row.readiness],
+                        }}
+                      >
+                        {READINESS_LABEL[row.readiness]}
+                      </span>
+                    </td>
+                    <td style={{ padding: "9px 12px", fontSize: 12, color: "#fca5a5", minWidth: 260 }}>
+                      {row.issueTags.length === 0 ? (
+                        <span style={{ color: "#86efac" }}>No issue</span>
+                      ) : (
+                        row.issueTags.join(" · ")
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
