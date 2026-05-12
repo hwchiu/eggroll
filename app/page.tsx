@@ -257,7 +257,7 @@ export default function Home() {
             {
               label: "Companies in scope",
               value: stats.total,
-              helper: `${toPct(stats.total, monitoringRecords.length)} of 253`,
+              helper: `${toPct(stats.total, monitoringRecords.length)} of ${monitoringRecords.length}`,
               icon: CalendarClock,
               color: "#38bdf8",
             },
