@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "CHR Card Duel Arena",
-  description: "Pokemon vs Melody two-player card duel with persistent battle records",
+  title: "Eggroll Financial Monitoring Dashboard",
+  description:
+    "Monitoring platform for 2026 Q2 earnings events, financial reports, and segment report readiness.",
 };
 
 export default function RootLayout({
@@ -13,9 +14,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">
-        {children}
-      </body>
+      <body className="antialiased">{children}</body>
     </html>
   );
 }
