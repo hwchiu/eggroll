@@ -15,6 +15,24 @@
   --info:         #3b82f6;
 }
 
+/* ─── Light mode overrides ─── */
+html.light {
+  --bg-base:      #f0f2f5;
+  --bg-surface:   #ffffff;
+  --bg-elevated:  #e8ecf2;
+  --border:       #d0d7e2;
+  --text-primary: #1a202c;
+  --text-muted:   #64748b;
+  --accent:       #4f46e5;
+  --accent-hover: #4338ca;
+}
+
+html.light .json-key   { color: #2563eb; }
+html.light .json-str   { color: #16a34a; }
+html.light .json-num   { color: #d97706; }
+html.light .json-bool  { color: #db2777; }
+html.light .json-null  { color: #64748b; }
+
 * { box-sizing: border-box; }
 
 body {
