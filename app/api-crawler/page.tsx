@@ -1,17 +1,22 @@
 // app/api-crawler/page.tsx
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { RequestConfig, ApiResponse, SchemaField, DagConfig } from "@/lib/types";
+import { ActivityBar } from "@/components/api-crawler/ActivityBar";
+import { CollectionsTree } from "@/components/api-crawler/CollectionsTree";
+import { RequestBreadcrumb } from "@/components/api-crawler/RequestBreadcrumb";
 import { EndpointBar } from "@/components/api-crawler/EndpointBar";
-import { ParamsEditor } from "@/components/api-crawler/ParamsEditor";
-import { AuthEditor } from "@/components/api-crawler/AuthEditor";
-import { ResponseViewer } from "@/components/api-crawler/ResponseViewer";
-import { SchemaEditor } from "@/components/api-crawler/SchemaEditor";
-import { DagConfigPanel } from "@/components/api-crawler/DagConfigPanel";
-import { Header } from "@/components/layout/Header";
+import { RequestTabs } from "@/components/api-crawler/RequestTabs";
+import { ResponsePanel } from "@/components/api-crawler/ResponsePanel";
+import { RightIconBar } from "@/components/api-crawler/RightIconBar";
+import { SchemaPanel } from "@/components/api-crawler/SchemaPanel";
+import { DagPanel } from "@/components/api-crawler/DagPanel";
 import { executeRequest } from "@/lib/apiClient";
 import { inferSchema } from "@/lib/schemaInfer";
+import { mockRequests, mockCollections } from "@/data/mockCollections";
+
+// ─── Constants ───────────────────────────────────────────────────────────────
 
 const DEFAULT_REQUEST: RequestConfig = {
   id: "new",
@@ -36,7 +41,27 @@ const DEFAULT_DAG: DagConfig = {
   timeoutSeconds: 120,
 };
 
-type LeftTab = "params" | "auth";
+type ActivitySection = "collections" | "environments" | "history";
+type RightPanel = "schema" | "dag";
+
+/** Walk the collections tree to find breadcrumb info for a requestId */
+function findBreadcrumb(requestId: string): { collection: string; folder: string } {
+  for (const col of mockCollections) {
+    if (col.kind !== "collection") continue;
+    for (const child of col.children) {
+      if (child.kind === "folder") {
+        for (const leaf of child.children) {
+          if (leaf.kind === "request" && leaf.requestId === requestId) {
+            return { collection: col.name, folder: child.name };
+          }
+        }
+      }
+    }
+  }
+  return { collection: "Collections", folder: "—" };
+}
+
+// ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ApiCrawlerPage() {
   const [request, setRequest] = useState<RequestConfig>(DEFAULT_REQUEST);
@@ -44,8 +69,23 @@ export default function ApiCrawlerPage() {
   const [loading, setLoading] = useState(false);
   const [schema, setSchema] = useState<SchemaField[]>([]);
   const [dagConfig, setDagConfig] = useState<DagConfig>(DEFAULT_DAG);
-  const [leftTab, setLeftTab] = useState<LeftTab>("params");
+
+  const [activeSection, setActiveSection] = useState<ActivitySection | null>("collections");
+  const [activeRequestId, setActiveRequestId] = useState<string | null>(null);
+  const [breadcrumb, setBreadcrumb] = useState({ collection: "tMIC", folder: "New" });
+  const [rightPanel, setRightPanel] = useState<RightPanel | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+
+  const handleSelectRequest = useCallback((requestId: string) => {
+    const mock = mockRequests[requestId];
+    if (!mock) return;
+    setRequest(mock.config);
+    setSchema(mock.schema);
+    setDagConfig(mock.dagConfig);
+    setResponse(mock.mockResponse);
+    setActiveRequestId(requestId);
+    setBreadcrumb(findBreadcrumb(requestId));
+  }, []);
 
   const setReq = (patch: Partial<RequestConfig>) => setRequest((r) => ({ ...r, ...patch }));
 
@@ -54,6 +94,14 @@ export default function ApiCrawlerPage() {
     setLoading(true);
     setResponse(null);
     try {
+      if (activeRequestId && (request.url.includes("tmic-internal") || request.url.includes("marketdata.app"))) {
+        const mock = mockRequests[activeRequestId];
+        if (mock) {
+          await new Promise((r) => setTimeout(r, mock.mockResponse.durationMs));
+          setResponse(mock.mockResponse);
+          return;
+        }
+      }
       const res = await executeRequest(request);
       setResponse(res);
     } finally {
@@ -66,96 +114,79 @@ export default function ApiCrawlerPage() {
     setSchema(inferSchema(response.body));
   }
 
-  function handleSaveCrawler() {
+  function handleSave() {
     const name = dagConfig.crawlerName || request.name;
-    setSaveMsg(`Crawler "${name}" saved! (mock)`);
-    setTimeout(() => setSaveMsg(null), 3000);
+    setSaveMsg(`"${name}" saved!`);
+    setTimeout(() => setSaveMsg(null), 2500);
   }
 
+  function handleActivityToggle(section: ActivitySection) {
+    setActiveSection((cur) => (cur === section ? null : section));
+  }
+
+  function handleRightPanelToggle(panel: RightPanel) {
+    setRightPanel((cur) => (cur === panel ? null : panel));
+  }
+
+  const collectionsOpen = activeSection === "collections";
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100%", overflow: "hidden" }}>
-      <Header title="API Crawler Designer" />
+    <div style={{ display: "flex", flexDirection: "row", height: "100%", overflow: "hidden", background: "var(--bg-base)" }}>
 
-      <EndpointBar
-        method={request.method}
-        url={request.url}
-        loading={loading}
-        onMethodChange={(m) => setReq({ method: m })}
-        onUrlChange={(url) => setReq({ url })}
-        onSend={handleSend}
-      />
+      {/* Activity Bar */}
+      <ActivityBar activeSection={activeSection} onSectionToggle={handleActivityToggle} />
 
-      {saveMsg && (
-        <div style={{ background: "var(--success)", color: "#000", padding: "6px 16px", fontSize: 13, fontWeight: 600 }}>
-          ✓ {saveMsg}
-        </div>
+      {/* Collections Tree (collapsible) */}
+      {collectionsOpen && (
+        <CollectionsTree
+          activeRequestId={activeRequestId}
+          onSelectRequest={handleSelectRequest}
+        />
       )}
 
-      {/* Main split: left params/auth + right response */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", borderBottom: "1px solid var(--border)" }}>
-        {/* Left pane */}
-        <div style={{ width: "50%", borderRight: "1px solid var(--border)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <div style={{ display: "flex", borderBottom: "1px solid var(--border)", paddingLeft: 8 }}>
-            {(["params", "auth"] as LeftTab[]).map((t) => (
-              <button
-                key={t}
-                onClick={() => setLeftTab(t)}
-                style={{
-                  padding: "9px 16px",
-                  background: "none",
-                  border: "none",
-                  borderBottom: leftTab === t ? "2px solid var(--accent)" : "2px solid transparent",
-                  color: leftTab === t ? "var(--accent-hover)" : "var(--text-muted)",
-                  cursor: "pointer",
-                  fontSize: 13,
-                  fontWeight: leftTab === t ? 600 : 400,
-                }}
-              >
-                {t === "params" ? "Params" : "Auth"}
-              </button>
-            ))}
-          </div>
-
-          <div style={{ flex: 1, overflow: "auto" }}>
-            {leftTab === "params" ? (
-              <ParamsEditor
-                queryParams={request.queryParams}
-                pathParams={request.pathParams}
-                headers={request.headers}
-                bodyType={request.bodyType}
-                bodyJson={request.bodyJson}
-                onQueryParamsChange={(p) => setReq({ queryParams: p })}
-                onPathParamsChange={(p) => setReq({ pathParams: p })}
-                onHeadersChange={(h) => setReq({ headers: h })}
-                onBodyTypeChange={(t) => setReq({ bodyType: t })}
-                onBodyJsonChange={(s) => setReq({ bodyJson: s })}
-              />
-            ) : (
-              <AuthEditor auth={request.auth} onChange={(a) => setReq({ auth: a })} />
-            )}
-          </div>
-        </div>
-
-        {/* Right pane — Response */}
+      {/* Main Area */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+        <RequestBreadcrumb
+          collectionName={breadcrumb.collection}
+          folderName={breadcrumb.folder}
+          requestName={request.name}
+          onRequestNameChange={(name) => setReq({ name })}
+          onSave={handleSave}
+          saveMessage={saveMsg}
+        />
+        <EndpointBar
+          method={request.method}
+          url={request.url}
+          loading={loading}
+          onMethodChange={(m) => setReq({ method: m })}
+          onUrlChange={(url) => setReq({ url })}
+          onSend={handleSend}
+        />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-          <ResponseViewer response={response} loading={loading} />
+          <div style={{ flex: "0 0 220px", overflow: "hidden", display: "flex", flexDirection: "column" }}>
+            <RequestTabs request={request} onChange={setReq} />
+          </div>
+          <div style={{ flex: 1, display: "flex", overflow: "hidden", borderTop: "1px solid var(--border)" }}>
+            <ResponsePanel response={response} loading={loading} />
+          </div>
         </div>
       </div>
 
-      {/* Bottom split: schema + dag config */}
-      <div style={{ height: 280, display: "flex", overflow: "hidden", flexShrink: 0 }}>
-        <div style={{ flex: 1, borderRight: "1px solid var(--border)", overflow: "auto" }}>
-          <SchemaEditor
-            fields={schema}
-            onFieldsChange={setSchema}
-            onInferFromResponse={handleInferSchema}
-            hasResponse={!!response?.body}
-          />
-        </div>
-        <div style={{ width: 380, overflow: "auto" }}>
-          <DagConfigPanel config={dagConfig} onChange={setDagConfig} onSave={handleSaveCrawler} />
-        </div>
-      </div>
+      {/* Right Slide-in Panels */}
+      {rightPanel === "schema" && (
+        <SchemaPanel
+          fields={schema}
+          onFieldsChange={setSchema}
+          onInferFromResponse={handleInferSchema}
+          hasResponse={!!response?.body}
+        />
+      )}
+      {rightPanel === "dag" && (
+        <DagPanel config={dagConfig} onChange={setDagConfig} onSave={handleSave} />
+      )}
+
+      {/* Right Icon Bar */}
+      <RightIconBar activePanel={rightPanel} onPanelToggle={handleRightPanelToggle} />
     </div>
   );
 }
