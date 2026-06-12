@@ -1,18 +1,36 @@
 // components/layout/Sidebar.tsx
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Code2, Briefcase, Settings, Layers } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Code2, Briefcase, Settings, Layers, Sun, Moon } from "lucide-react";
+
+const BASE = "/eggroll";
 
 const NAV_ITEMS = [
-  { href: "/api-crawler", icon: Code2,    label: "API Crawler" },
-  { href: "/jobs",        icon: Briefcase, label: "My Jobs"     },
-  { href: "/settings",    icon: Settings,  label: "Settings"    },
+  { path: "/api-crawler", icon: Code2,     label: "API Crawler" },
+  { path: "/jobs",        icon: Briefcase, label: "My Jobs"     },
+  { path: "/settings",    icon: Settings,  label: "Settings"    },
 ];
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const pathname = usePathname(); // returns path WITHOUT basePath, e.g. "/api-crawler"
+  const [dark, setDark] = useState(true);
+
+  // Initialise theme from localStorage on mount
+  useEffect(() => {
+    const stored = localStorage.getItem("tmic-theme");
+    const isDark = stored ? stored === "dark" : true;
+    setDark(isDark);
+    document.documentElement.classList.toggle("light", !isDark);
+  }, []);
+
+  const toggleTheme = () => {
+    const next = !dark;
+    setDark(next);
+    document.documentElement.classList.toggle("light", !next);
+    localStorage.setItem("tmic-theme", next ? "dark" : "light");
+  };
 
   return (
     <aside
@@ -42,12 +60,13 @@ export function Sidebar() {
       </div>
 
       <nav style={{ flex: 1, padding: "12px 8px" }}>
-        {NAV_ITEMS.map(({ href, icon: Icon, label }) => {
-          const active = pathname.startsWith(href);
+        {NAV_ITEMS.map(({ path, icon: Icon, label }) => {
+          const active = pathname.startsWith(path);
+          // Use plain <a> with absolute path to avoid Next.js basePath double-prepend
           return (
-            <Link
-              key={href}
-              href={href}
+            <a
+              key={path}
+              href={`${BASE}${path}/`}
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -65,13 +84,37 @@ export function Sidebar() {
             >
               <Icon size={17} />
               {label}
-            </Link>
+            </a>
           );
         })}
       </nav>
 
-      <div style={{ padding: "12px 16px", borderTop: "1px solid var(--border)" }}>
+      <div
+        style={{
+          padding: "12px 16px",
+          borderTop: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
         <span style={{ fontSize: 11, color: "var(--text-muted)" }}>Phase 1 — MVP</span>
+        <button
+          onClick={toggleTheme}
+          title={dark ? "Switch to Light mode" : "Switch to Dark mode"}
+          style={{
+            background: "var(--bg-elevated)",
+            border: "1px solid var(--border)",
+            borderRadius: 6,
+            padding: "4px 6px",
+            cursor: "pointer",
+            color: "var(--text-muted)",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
+          {dark ? <Sun size={14} /> : <Moon size={14} />}
+        </button>
       </div>
     </aside>
   );
