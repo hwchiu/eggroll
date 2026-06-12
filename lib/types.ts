@@ -91,3 +91,17 @@ export interface JobRun {
   errorMessage: string | null;
   schedule: string;
 }
+
+// --- Collections Tree ---
+
+export type CollectionNode =
+  | { kind: "collection"; id: string; name: string; children: CollectionNode[] }
+  | { kind: "folder";     id: string; name: string; children: CollectionNode[] }
+  | { kind: "request";    id: string; name: string; method: HttpMethod; requestId: string };
+
+export interface MockRequest {
+  config: RequestConfig;
+  mockResponse: ApiResponse;
+  schema: SchemaField[];
+  dagConfig: DagConfig;
+}
