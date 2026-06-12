@@ -6,9 +6,9 @@ import { usePathname } from "next/navigation";
 import { Code2, Briefcase, Settings, Layers } from "lucide-react";
 
 const NAV_ITEMS = [
-  { href: "/eggroll/api-crawler", icon: Code2,    label: "API Crawler" },
-  { href: "/eggroll/jobs",        icon: Briefcase, label: "My Jobs"     },
-  { href: "/eggroll/settings",    icon: Settings,  label: "Settings"    },
+  { href: "/api-crawler", icon: Code2,    label: "API Crawler" },
+  { href: "/jobs",        icon: Briefcase, label: "My Jobs"     },
+  { href: "/settings",    icon: Settings,  label: "Settings"    },
 ];
 
 export function Sidebar() {
