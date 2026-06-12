@@ -1,20 +1,18 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { Shell } from "@/components/layout/Shell";
 
 export const metadata: Metadata = {
-  title: "Eggroll Financial Monitoring Dashboard",
-  description:
-    "Monitoring platform for 2026 Q2 earnings events, financial reports, and segment report readiness.",
+  title: "tMIC Workspace",
+  description: "Low-Code API & AI Crawler Designer for marketing intelligence",
 };
 
-export default function RootLayout({
-  children,
-}: Readonly<{
-  children: React.ReactNode;
-}>) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="antialiased">
+        <Shell>{children}</Shell>
+      </body>
     </html>
   );
 }
