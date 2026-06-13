@@ -25,6 +25,7 @@ export type BodyType = "none" | "json" | "form";
 export interface RequestConfig {
   id: string;
   name: string;
+  description?: string;
   method: HttpMethod;
   url: string;
   queryParams: KeyValuePair[];
