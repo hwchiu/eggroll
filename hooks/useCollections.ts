@@ -28,11 +28,12 @@ function saveUserRequests(reqs: Record<string, MockRequest>) {
   localStorage.setItem(LS_REQUESTS, JSON.stringify(reqs));
 }
 
-function makeBlankRequest(id: string, name: string): MockRequest {
+function makeBlankRequest(id: string, name: string, description?: string): MockRequest {
   return {
     config: {
       id,
       name,
+      description: description ?? "",
       method: "GET",
       url: "",
       queryParams: [],
@@ -88,7 +89,7 @@ export function useCollections() {
     return id;
   }, []);
 
-  const addRequest = useCallback((parentId: string, requestName: string): string => {
+  const addRequest = useCallback((parentId: string, requestName: string, description?: string): string => {
     const requestId = `req-${Date.now()}`;
     const treeNode: CollectionNode = {
       kind: "request",
@@ -97,7 +98,7 @@ export function useCollections() {
       method: "GET",
       requestId,
     };
-    const blank = makeBlankRequest(requestId, requestName);
+    const blank = makeBlankRequest(requestId, requestName, description);
 
     setUserCollections((prev) => {
       function insertInto(nodes: CollectionNode[]): CollectionNode[] {

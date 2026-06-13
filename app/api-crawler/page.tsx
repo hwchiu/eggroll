@@ -142,21 +142,6 @@ export default function ApiCrawlerPage() {
     setRightPanel((cur) => (cur === panel ? null : panel));
   }
 
-  function handleModalCreate(
-    type: "collection" | "folder",
-    parentId: string | null,
-    containerName: string,
-    requestName: string
-  ) {
-    let targetId: string;
-    if (type === "collection") {
-      targetId = addCollection(containerName);
-    } else {
-      targetId = addFolder(parentId!, containerName);
-    }
-    const newRequestId = addRequest(targetId, requestName);
-    setTimeout(() => handleSelectRequest(newRequestId), 50);
-  }
 
   const collectionsOpen = activeSection === "collections";
 
@@ -225,7 +210,13 @@ export default function ApiCrawlerPage() {
         <NewItemModal
           collections={collections}
           onClose={() => setShowNewItemModal(false)}
-          onCreate={handleModalCreate}
+          addCollection={addCollection}
+          addFolder={addFolder}
+          onCreate={(parentId, reqName, desc) => {
+            const newRequestId = addRequest(parentId, reqName, desc);
+            setTimeout(() => handleSelectRequest(newRequestId), 50);
+            setShowNewItemModal(false);
+          }}
         />
       )}
     </div>
