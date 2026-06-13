@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import type { RequestConfig, ApiResponse, SchemaField, DagConfig } from "@/lib/types";
+import type { RequestConfig, ApiResponse, SchemaField, DagConfig, CollectionNode } from "@/lib/types";
 import { ActivityBar } from "@/components/api-crawler/ActivityBar";
 import { CollectionsTree } from "@/components/api-crawler/CollectionsTree";
 import { RequestBreadcrumb } from "@/components/api-crawler/RequestBreadcrumb";
@@ -12,9 +12,10 @@ import { ResponsePanel } from "@/components/api-crawler/ResponsePanel";
 import { RightIconBar } from "@/components/api-crawler/RightIconBar";
 import { SchemaPanel } from "@/components/api-crawler/SchemaPanel";
 import { DagPanel } from "@/components/api-crawler/DagPanel";
+import { NewItemModal } from "@/components/api-crawler/NewItemModal";
 import { executeRequest } from "@/lib/apiClient";
 import { inferSchema } from "@/lib/schemaInfer";
-import { mockRequests, mockCollections } from "@/data/mockCollections";
+import { useCollections } from "@/hooks/useCollections";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -44,9 +45,12 @@ const DEFAULT_DAG: DagConfig = {
 type ActivitySection = "collections" | "environments" | "history";
 type RightPanel = "schema" | "dag";
 
-/** Walk the collections tree to find breadcrumb info for a requestId */
-function findBreadcrumb(requestId: string): { collection: string; folder: string } {
-  for (const col of mockCollections) {
+/** Walk a collections tree to find breadcrumb info for a requestId */
+function findBreadcrumb(
+  nodes: CollectionNode[],
+  requestId: string
+): { collection: string; folder: string } {
+  for (const col of nodes) {
     if (col.kind !== "collection") continue;
     for (const child of col.children) {
       if (child.kind === "folder") {
@@ -56,6 +60,9 @@ function findBreadcrumb(requestId: string): { collection: string; folder: string
           }
         }
       }
+      if (child.kind === "request" && child.requestId === requestId) {
+        return { collection: col.name, folder: "—" };
+      }
     }
   }
   return { collection: "Collections", folder: "—" };
@@ -64,6 +71,8 @@ function findBreadcrumb(requestId: string): { collection: string; folder: string
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ApiCrawlerPage() {
+  const { collections, requests, addCollection, addFolder, addRequest, saveRequest } = useCollections();
+
   const [request, setRequest] = useState<RequestConfig>(DEFAULT_REQUEST);
   const [response, setResponse] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -75,17 +84,18 @@ export default function ApiCrawlerPage() {
   const [breadcrumb, setBreadcrumb] = useState({ collection: "tMIC", folder: "New" });
   const [rightPanel, setRightPanel] = useState<RightPanel | null>(null);
   const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const [showNewItemModal, setShowNewItemModal] = useState(false);
 
   const handleSelectRequest = useCallback((requestId: string) => {
-    const mock = mockRequests[requestId];
+    const mock = requests[requestId];
     if (!mock) return;
     setRequest(mock.config);
     setSchema(mock.schema);
     setDagConfig(mock.dagConfig);
-    setResponse(mock.mockResponse);
+    setResponse(mock.mockResponse.status !== 0 ? mock.mockResponse : null);
     setActiveRequestId(requestId);
-    setBreadcrumb(findBreadcrumb(requestId));
-  }, []);
+    setBreadcrumb(findBreadcrumb(collections, requestId));
+  }, [requests, collections]);
 
   const setReq = (patch: Partial<RequestConfig>) => setRequest((r) => ({ ...r, ...patch }));
 
@@ -94,9 +104,10 @@ export default function ApiCrawlerPage() {
     setLoading(true);
     setResponse(null);
     try {
-      if (activeRequestId && (request.url.includes("tmic-internal") || request.url.includes("marketdata.app"))) {
-        const mock = mockRequests[activeRequestId];
-        if (mock) {
+      if (activeRequestId) {
+        const mock = requests[activeRequestId];
+        if (mock && mock.mockResponse.status !== 0 &&
+            (request.url.includes("tmic-internal") || request.url.includes("marketdata.app"))) {
           await new Promise((r) => setTimeout(r, mock.mockResponse.durationMs));
           setResponse(mock.mockResponse);
           return;
@@ -115,6 +126,9 @@ export default function ApiCrawlerPage() {
   }
 
   function handleSave() {
+    if (activeRequestId) {
+      saveRequest(activeRequestId, { config: request, schema, dagConfig });
+    }
     const name = dagConfig.crawlerName || request.name;
     setSaveMsg(`"${name}" saved!`);
     setTimeout(() => setSaveMsg(null), 2500);
@@ -128,6 +142,22 @@ export default function ApiCrawlerPage() {
     setRightPanel((cur) => (cur === panel ? null : panel));
   }
 
+  function handleModalCreate(
+    type: "collection" | "folder",
+    parentId: string | null,
+    containerName: string,
+    requestName: string
+  ) {
+    let targetId: string;
+    if (type === "collection") {
+      targetId = addCollection(containerName);
+    } else {
+      targetId = addFolder(parentId!, containerName);
+    }
+    const newRequestId = addRequest(targetId, requestName);
+    setTimeout(() => handleSelectRequest(newRequestId), 50);
+  }
+
   const collectionsOpen = activeSection === "collections";
 
   return (
@@ -139,8 +169,10 @@ export default function ApiCrawlerPage() {
       {/* Collections Tree (collapsible) */}
       {collectionsOpen && (
         <CollectionsTree
+          collections={collections}
           activeRequestId={activeRequestId}
           onSelectRequest={handleSelectRequest}
+          onAdd={() => setShowNewItemModal(true)}
         />
       )}
 
@@ -187,6 +219,15 @@ export default function ApiCrawlerPage() {
 
       {/* Right Icon Bar */}
       <RightIconBar activePanel={rightPanel} onPanelToggle={handleRightPanelToggle} />
+
+      {/* New Item Modal */}
+      {showNewItemModal && (
+        <NewItemModal
+          collections={collections}
+          onClose={() => setShowNewItemModal(false)}
+          onCreate={handleModalCreate}
+        />
+      )}
     </div>
   );
 }
