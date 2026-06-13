@@ -4,11 +4,12 @@
 import { useState } from "react";
 import { ChevronRight, ChevronDown, Folder, FolderOpen, Plus } from "lucide-react";
 import type { CollectionNode, HttpMethod } from "@/lib/types";
-import { mockCollections } from "@/data/mockCollections";
 
 interface CollectionsTreeProps {
+  collections: CollectionNode[];
   activeRequestId: string | null;
   onSelectRequest: (requestId: string) => void;
+  onAdd: () => void;
 }
 
 function TreeNode({
@@ -103,7 +104,7 @@ function TreeNode({
   );
 }
 
-export function CollectionsTree({ activeRequestId, onSelectRequest }: CollectionsTreeProps) {
+export function CollectionsTree({ collections, activeRequestId, onSelectRequest, onAdd }: CollectionsTreeProps) {
   return (
     <div style={{
       width: 240,
@@ -133,7 +134,8 @@ export function CollectionsTree({ activeRequestId, onSelectRequest }: Collection
           Collections
         </span>
         <button
-          title="New Collection (coming soon)"
+          title="New Collection or Folder"
+          onClick={onAdd}
           style={{
             background: "none",
             border: "none",
@@ -150,7 +152,7 @@ export function CollectionsTree({ activeRequestId, onSelectRequest }: Collection
 
       {/* Tree */}
       <div style={{ flex: 1, overflowY: "auto" }}>
-        {mockCollections.map((col) => (
+        {collections.map((col) => (
           <TreeNode
             key={col.id}
             node={col}
