@@ -1,6 +1,9 @@
 // lib/apiClient.ts
 import type { RequestConfig, ApiResponse } from "./types";
 
+// Backend proxy endpoint — lego2.hwchiu.com has /api/ routed to this server's Spring Boot backend
+const PROXY_URL = "https://lego2.hwchiu.com/api/eggroll/proxy";
+
 function buildHeaders(config: RequestConfig): Record<string, string> {
   const h: Record<string, string> = {};
 
@@ -60,7 +63,7 @@ function buildBody(config: RequestConfig): string | undefined {
 export async function executeRequest(config: RequestConfig): Promise<ApiResponse> {
   const start = Date.now();
   try {
-    const res = await fetch("/api/eggroll/proxy", {
+    const res = await fetch(PROXY_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(config),
