@@ -1,0 +1,12 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+spring:
+  application:
+    name: eggroll-api
+
+logging:
+  level:
+    com.tmic.eggroll: DEBUG

@@ -58,37 +58,17 @@ function buildBody(config: RequestConfig): string | undefined {
 }
 
 export async function executeRequest(config: RequestConfig): Promise<ApiResponse> {
-  const url = buildUrl(config);
-  const headers = buildHeaders(config);
-  const body = buildBody(config);
   const start = Date.now();
-
   try {
-    const res = await fetch(url, {
-      method: config.method,
-      headers,
-      body,
+    const res = await fetch("/api/eggroll/proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
     });
 
     const durationMs = Date.now() - start;
-    const resHeaders: Record<string, string> = {};
-    res.headers.forEach((val, key) => { resHeaders[key] = val; });
-
-    let resBody: unknown;
-    const contentType = res.headers.get("content-type") ?? "";
-    if (contentType.includes("application/json")) {
-      resBody = await res.json();
-    } else {
-      resBody = await res.text();
-    }
-
-    return {
-      status: res.status,
-      statusText: res.statusText,
-      headers: resHeaders,
-      body: resBody,
-      durationMs,
-    };
+    const data: ApiResponse = await res.json();
+    return { ...data, durationMs };
   } catch (err: unknown) {
     return {
       status: 0,

@@ -1,0 +1,9 @@
+/tmp/eggroll-check/backend/src/main/java/com/tmic/eggroll/EggrollApiApplication.java
+/tmp/eggroll-check/backend/src/main/java/com/tmic/eggroll/config/CorsConfig.java
+/tmp/eggroll-check/backend/src/main/java/com/tmic/eggroll/config/WebClientConfig.java
+/tmp/eggroll-check/backend/src/main/java/com/tmic/eggroll/controller/ProxyController.java
+/tmp/eggroll-check/backend/src/main/java/com/tmic/eggroll/model/ApiResponse.java
+/tmp/eggroll-check/backend/src/main/java/com/tmic/eggroll/model/AuthConfig.java
+/tmp/eggroll-check/backend/src/main/java/com/tmic/eggroll/model/KeyValuePair.java
+/tmp/eggroll-check/backend/src/main/java/com/tmic/eggroll/model/RequestConfig.java
+/tmp/eggroll-check/backend/src/main/java/com/tmic/eggroll/service/ProxyService.java
