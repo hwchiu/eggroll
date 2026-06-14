@@ -48,7 +48,7 @@ class ProxyControllerTest {
 
         when(proxyService.proxy(any(RequestConfig.class))).thenReturn(mockResp);
 
-        mockMvc.perform(post("/eggroll/proxy")
+        mockMvc.perform(post("/api/eggroll/proxy")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isOk())
@@ -66,7 +66,7 @@ class ProxyControllerTest {
             new AuthConfig("none", null, null, null, null, null)
         );
 
-        mockMvc.perform(post("/eggroll/proxy")
+        mockMvc.perform(post("/api/eggroll/proxy")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(req)))
             .andExpect(status().isBadRequest());
