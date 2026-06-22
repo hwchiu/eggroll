@@ -210,3 +210,38 @@ body {
   letter-spacing: 1px;
   font-family: 'JetBrains Mono', monospace;
 }
+
+/* ===== RWD MOBILE (≤768px) ===== */
+
+/* Bottom nav: hidden by default (desktop), shown on mobile */
+.bottom-nav {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  /* Hide sidebar on mobile */
+  .sidebar {
+    display: none !important;
+  }
+
+  /* Main content: add padding so content isn't hidden behind bottom nav */
+  .shell-main {
+    padding-bottom: 56px;
+  }
+
+  /* Bottom nav: show on mobile */
+  .bottom-nav {
+    display: flex !important;
+  }
+
+  /* TopBar right group: allow wrapping on very small screens */
+  .topbar-right {
+    flex-wrap: wrap;
+    gap: 2px;
+  }
+
+  /* Hide user name/role text on mobile to save space; avatar stays */
+  .topbar-user-text {
+    display: none;
+  }
+}

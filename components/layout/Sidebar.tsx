@@ -17,6 +17,7 @@ export function Sidebar() {
 
   return (
     <aside
+      className="sidebar"
       style={{
         width: 200,
         minWidth: 200,
