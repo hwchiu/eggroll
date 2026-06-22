@@ -224,9 +224,11 @@ body {
     display: none !important;
   }
 
-  /* Main content: add padding so content isn't hidden behind bottom nav */
+  /* Main content: scrollable, add padding so content isn't hidden behind bottom nav */
   .shell-main {
     padding-bottom: 56px;
+    overflow-y: auto !important;
+    min-height: 0;
   }
 
   /* Bottom nav: show on mobile */
@@ -243,5 +245,26 @@ body {
   /* Hide user name/role text on mobile to save space; avatar stays */
   .topbar-user-text {
     display: none;
+  }
+
+  /* api-crawler page: stack vertically and scroll */
+  .api-crawler-layout {
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: 100%;
+    overflow: visible !important;
+  }
+
+  /* Hide ActivityBar on mobile (bottom nav handles page navigation) */
+  .activity-bar {
+    display: none !important;
+  }
+
+  /* CollectionsTree: full width on mobile */
+  .api-crawler-layout > [style*="width: 240"] {
+    width: 100% !important;
+    max-height: 240px;
+    border-right: none !important;
+    border-bottom: 1px solid var(--border);
   }
 }

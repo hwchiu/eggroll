@@ -146,7 +146,7 @@ export default function ApiCrawlerPage() {
   const collectionsOpen = activeSection === "collections";
 
   return (
-    <div style={{ display: "flex", flexDirection: "row", height: "100%", overflow: "hidden", background: "var(--bg-base)" }}>
+    <div className="api-crawler-layout" style={{ display: "flex", flexDirection: "row", height: "100%", overflow: "hidden", background: "var(--bg-base)" }}>
 
       {/* Activity Bar */}
       <ActivityBar activeSection={activeSection} onSectionToggle={handleActivityToggle} />

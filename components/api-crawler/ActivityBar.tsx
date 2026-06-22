@@ -18,7 +18,7 @@ const BUTTONS: { section: Section; Icon: React.FC<{ size: number }>; label: stri
 
 export function ActivityBar({ activeSection, onSectionToggle }: ActivityBarProps) {
   return (
-    <div style={{
+    <div className="activity-bar" style={{
       width: 44,
       flexShrink: 0,
       display: "flex",
