@@ -6,7 +6,6 @@ import { Sun, Moon, Globe, BookOpen, ChevronDown } from "lucide-react";
 const LANGUAGES = [
   { code: "en", label: "English" },
   { code: "zh-TW", label: "繁體中文" },
-  { code: "ja", label: "日本語" },
 ];
 
 // Mock user — replace with real auth context in a later phase
@@ -99,7 +98,7 @@ export function TopBar() {
       </div>
 
       {/* Right icon group */}
-      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+      <div className="topbar-right" style={{ display: "flex", alignItems: "center", gap: 4 }}>
 
         {/* User Manual */}
         <TopBarButton
@@ -210,7 +209,7 @@ export function TopBar() {
             >
               {MOCK_USER.avatarInitials}
             </div>
-            <div style={{ textAlign: "left", lineHeight: 1.3 }}>
+            <div className="topbar-user-text" style={{ textAlign: "left", lineHeight: 1.3 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "var(--text-primary)" }}>
                 {MOCK_USER.displayName}
               </div>
