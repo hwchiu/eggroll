@@ -15,7 +15,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
             flex: 1,
             display: "flex",
             flexDirection: "column",
-            overflow: "hidden",
+            overflow: "auto",
             background: "var(--bg-base)",
           }}
         >

@@ -105,6 +105,8 @@ function TreeNode({
 }
 
 export function CollectionsTree({ collections, activeRequestId, onSelectRequest, onAdd }: CollectionsTreeProps) {
+  const [treeOpen, setTreeOpen] = useState(true);
+
   return (
     <div style={{
       width: 240,
@@ -115,7 +117,7 @@ export function CollectionsTree({ collections, activeRequestId, onSelectRequest,
       borderRight: "1px solid var(--border)",
       overflow: "hidden",
     }}>
-      {/* Header */}
+      {/* Header — click to collapse/expand tree */}
       <div style={{
         display: "flex",
         alignItems: "center",
@@ -124,15 +126,33 @@ export function CollectionsTree({ collections, activeRequestId, onSelectRequest,
         borderBottom: "1px solid var(--border)",
         flexShrink: 0,
       }}>
-        <span style={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: "var(--text-muted)",
-          textTransform: "uppercase",
-          letterSpacing: "0.08em",
-        }}>
-          Collections
-        </span>
+        <button
+          onClick={() => setTreeOpen((o) => !o)}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 4,
+            background: "none",
+            border: "none",
+            cursor: "pointer",
+            padding: 0,
+            color: "var(--text-muted)",
+          }}
+          title={treeOpen ? "Collapse" : "Expand"}
+        >
+          {treeOpen
+            ? <ChevronDown size={12} style={{ flexShrink: 0 }} />
+            : <ChevronRight size={12} style={{ flexShrink: 0 }} />}
+          <span style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: "var(--text-muted)",
+            textTransform: "uppercase",
+            letterSpacing: "0.08em",
+          }}>
+            Collections
+          </span>
+        </button>
         <button
           title="New Collection or Folder"
           onClick={onAdd}
@@ -150,8 +170,8 @@ export function CollectionsTree({ collections, activeRequestId, onSelectRequest,
         </button>
       </div>
 
-      {/* Tree */}
-      <div style={{ flex: 1, overflowY: "auto" }}>
+      {/* Tree — hidden when collapsed */}
+      {treeOpen && <div style={{ flex: 1, overflowY: "auto" }}>
         {collections.map((col) => (
           <TreeNode
             key={col.id}
@@ -161,7 +181,7 @@ export function CollectionsTree({ collections, activeRequestId, onSelectRequest,
             onSelectRequest={onSelectRequest}
           />
         ))}
-      </div>
+      </div>}
     </div>
   );
 }
