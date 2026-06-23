@@ -63,7 +63,7 @@ lib/apiClient.ts             Request execution through proxy
 lib/schemaInfer.ts           JSON-to-schema inference
 lib/types.ts                 Shared TypeScript types
 docs/                        Specs, plans, and screenshots
-backend/                     Spring Boot skeleton; no active Java source yet
+backend/                     Spring Boot proxy backend (active source under backend/src/main/java)
 ```
 
 ## Data model
