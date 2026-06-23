@@ -47,8 +47,9 @@ Useful commands:
 ```bash
 npm run lint
 npm run build
-npm run start
 ```
+
+After `npm run build`, preview by serving the generated `out/` directory under the `/eggroll` path.
 
 ## Project structure
 
@@ -100,6 +101,6 @@ This repo is configured for GitHub Pages:
 
 - This is a Phase 1 prototype, not a production crawler platform.
 - Persistence is local to each browser.
-- The backend folder is only a Spring Boot skeleton.
-- Environments, history, full i18n, real auth, and real job execution are not implemented yet.
+- The Spring Boot backend only provides the proxy and health endpoints; real crawler execution is not implemented yet.
+- Environments, history, full i18n, and real auth are not implemented yet.
 - Some older API crawler components are intentionally unused after the Postman-style redesign.
